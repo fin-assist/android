@@ -6,6 +6,7 @@ import ru.finassist.pf.core.designsystem.components.ErrorMessage
 import ru.finassist.pf.core.api.model.OperationItem
 import ru.finassist.pf.core.designsystem.theme.LocalPfClock
 import ru.finassist.pf.core.designsystem.theme.PfInsets
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -123,9 +124,13 @@ internal fun SearchContent(
     val f = state.filter
 
     PfRefreshContainer(state.refreshing, actions.refresh, Modifier.fillMaxSize(), enabled = state.hasFilters) {
-        Column(Modifier.fillMaxSize().windowInsetsPadding(PfInsets.statusBars).imePadding().testTag(OperationsTags.SEARCH)) {
+        Column(Modifier.fillMaxSize().imePadding().testTag(OperationsTags.SEARCH)) {
             Row(
-                Modifier.fillMaxWidth().padding(start = d.space3, end = d.space5, top = d.space2),
+                Modifier
+                    .fillMaxWidth()
+                    .background(PfTheme.colors.nav)
+                    .windowInsetsPadding(PfInsets.statusBars)
+                    .padding(start = d.space3, end = d.space5, top = d.space2),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(d.space1),
             ) {

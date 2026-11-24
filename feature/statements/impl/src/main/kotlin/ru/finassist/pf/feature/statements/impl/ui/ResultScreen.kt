@@ -17,7 +17,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.border
@@ -107,11 +106,18 @@ internal fun ResultContent(
     val d = PfTheme.dimens
     val c = PfTheme.colors
     val r = result
+    val empty = r != null && (r.operationCount == 0 || r.has(ImportNoticeCode.EMPTY_STATEMENT))
+    val resultUnavailable = error != null && r == null
+    val hasHeader = !empty && !resultUnavailable
+    val headerBackground = if (hasHeader) c.nav else c.bg
+    val screenMargin = Modifier.padding(horizontal = d.space5)
     BoxWithConstraints(
         Modifier
             .testTag(StatementsTags.RESULT)
             .fillMaxSize()
+            .background(headerBackground)
             .windowInsetsPadding(PfInsets.statusBars)
+            .background(c.bg)
             .windowInsetsPadding(PfInsets.navigationBars),
     ) {
         val viewport = maxHeight
@@ -120,23 +126,23 @@ internal fun ResultContent(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .heightIn(min = viewport)
-                .padding(start = d.space5, end = d.space5, top = d.space6, bottom = d.space4),
+                .padding(bottom = d.space4),
         ) {
-            if (error != null) {
-                ErrorMessage(error, "Не получилось показать итоги загрузки", onRetry = onRetry.takeUnless { retrying }, retryModifier = Modifier.testTag("statements.result.retry"))
-                if (r != null) PfNotice("Показаны ранее загруженные данные. Они могут быть неактуальны", tone = NoticeTone.WARNING)
-                if (r == null) {
-                    PfButton("Готово", onClick = onDone, block = true)
-                    return@Column
+            Column(Modifier.fillMaxWidth().background(headerBackground).then(screenMargin).padding(top = d.space6)) {
+                if (error != null) {
+                    ErrorMessage(error, "Не получилось показать итоги загрузки", onRetry = onRetry.takeUnless { retrying }, retryModifier = Modifier.testTag("statements.result.retry"))
+                    if (r != null) PfNotice("Показаны ранее загруженные данные. Они могут быть неактуальны", tone = NoticeTone.WARNING)
+                    if (resultUnavailable) PfButton("Готово", onClick = onDone, block = true)
                 }
+                // Special cases this client does not know (FIN-83) stay above the summary and the empty state.
+                r?.notices?.filter { it.code == ImportNoticeCode.UNKNOWN }?.mapNotNull { it.text?.takeIf(String::isNotBlank) }?.forEach { text ->
+                    PfNotice(text, tone = NoticeTone.WARNING, modifier = Modifier.padding(bottom = d.space4).testTag(StatementsTags.RESULT_NOTICE))
+                }
+                if (hasHeader) ResultHeader(r)
             }
-            // Special cases this client does not know (FIN-83): above everything, so an empty statement or a file with
-            // nothing new does not lose them.
-            r?.notices?.filter { it.code == ImportNoticeCode.UNKNOWN }?.mapNotNull { it.text?.takeIf(String::isNotBlank) }?.forEach { text ->
-                PfNotice(text, tone = NoticeTone.WARNING, modifier = Modifier.padding(bottom = d.space4).testTag(StatementsTags.RESULT_NOTICE))
-            }
-            if (r != null && (r.operationCount == 0 || r.has(ImportNoticeCode.EMPTY_STATEMENT))) {
-                Column(Modifier.weight(1f).fillMaxWidth().testTag(StatementsTags.RESULT_EMPTY), verticalArrangement = Arrangement.Center) {
+            if (resultUnavailable) return@Column
+            if (r != null && empty) {
+                Column(Modifier.weight(1f).fillMaxWidth().then(screenMargin).testTag(StatementsTags.RESULT_EMPTY), verticalArrangement = Arrangement.Center) {
                     PfEmptyState(
                         PfIcons.FILE_TEXT, "В выписке нет операций",
                         "За выбранный период операций не нашлось — выгрузите выписку за другой период",
@@ -157,15 +163,21 @@ internal fun ResultContent(
                 }
                 return@Column
             }
-            Summary(r, onOpenSearch, onOpenUnread, onUploadAnother = if (uploadEnabled) onUploadAnother else null)
+            if (r != null) {
+                Column(screenMargin) {
+                    Summary(r, onOpenSearch, onOpenUnread, onUploadAnother = if (uploadEnabled) onUploadAnother else null)
+                }
+            }
             Spacer(Modifier.weight(1f).heightIn(min = d.space6))
-            PfButton("Посмотреть аналитику", onClick = onOpenAnalytics, variant = ButtonVariant.PRIMARY, block = true, modifier = Modifier.testTag(StatementsTags.RESULT_ANALYTICS))
-            Row(
-                Modifier.fillMaxWidth().padding(top = d.space2),
-                horizontalArrangement = Arrangement.spacedBy(d.space6, Alignment.CenterHorizontally),
-            ) {
-                PfLink("Перейти к операциям", onClick = onDone, modifier = Modifier.testTag(StatementsTags.RESULT_DONE))
-                PfLink("История загрузок", onClick = onOpenHistory, modifier = Modifier.testTag(StatementsTags.RESULT_HISTORY))
+            Column(screenMargin) {
+                PfButton("Посмотреть аналитику", onClick = onOpenAnalytics, variant = ButtonVariant.PRIMARY, block = true, modifier = Modifier.testTag(StatementsTags.RESULT_ANALYTICS))
+                Row(
+                    Modifier.fillMaxWidth().padding(top = d.space2),
+                    horizontalArrangement = Arrangement.spacedBy(d.space6, Alignment.CenterHorizontally),
+                ) {
+                    PfLink("Перейти к операциям", onClick = onDone, modifier = Modifier.testTag(StatementsTags.RESULT_DONE))
+                    PfLink("История загрузок", onClick = onOpenHistory, modifier = Modifier.testTag(StatementsTags.RESULT_HISTORY))
+                }
             }
         }
     }
@@ -184,14 +196,7 @@ private fun UnreadNotice(r: ImportResult, onOpenUnread: () -> Unit) {
 }
 
 @Composable
-private fun ColumnScope.Summary(
-    r: ImportResult?,
-    onOpenSearch: (OperationsFilter) -> Unit,
-    onOpenUnread: () -> Unit,
-    onUploadAnother: (() -> Unit)?,
-) {
-    val d = PfTheme.dimens
-    val c = PfTheme.colors
+private fun ResultHeader(r: ImportResult?) {
     if (r == null) {
         PfStatusHero(tone = HeroTone.POSITIVE, title = "Выписка загружена", subtitle = "Операции и аналитика уже обновились", centered = false)
         return
@@ -205,7 +210,18 @@ private fun ColumnScope.Summary(
         centered = false,
         modifier = Modifier.testTag(if (nothingNew) StatementsTags.RESULT_NO_NEW else StatementsTags.RESULT_NEW),
     )
-    if (nothingNew) {
+}
+
+@Composable
+private fun Summary(
+    r: ImportResult,
+    onOpenSearch: (OperationsFilter) -> Unit,
+    onOpenUnread: () -> Unit,
+    onUploadAnother: (() -> Unit)?,
+) {
+    val d = PfTheme.dimens
+    val c = PfTheme.colors
+    if (r.newCount == 0) {
         Text(ResultTexts.nothingNew(r), style = PfTheme.type.lead, color = c.textMuted, modifier = Modifier.padding(top = d.space2))
         return
     }

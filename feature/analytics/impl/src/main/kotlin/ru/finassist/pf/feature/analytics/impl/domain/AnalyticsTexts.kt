@@ -6,6 +6,7 @@ import ru.finassist.pf.core.api.model.PeriodTypeCode
 import ru.finassist.pf.core.common.time.PeriodKey
 import ru.finassist.pf.core.common.time.RussianDates
 import ru.finassist.pf.core.common.time.countWithNoun
+import ru.finassist.pf.core.common.time.pluralize
 import java.time.YearMonth
 import java.time.OffsetDateTime
 import java.time.ZoneId
@@ -17,6 +18,9 @@ import java.time.ZoneId
 object AnalyticsTexts {
 
     private val QUARTERS = listOf("I", "II", "III", "IV")
+
+    fun assistantHelp(dailyLimit: Int): String =
+        "Помощник отвечает по вашим операциям, $dailyLimit ${pluralize(dailyLimit, "вопрос", "вопроса", "вопросов")} в день"
 
     /** «Сентябрь 2026», «III квартал 2026», «2026». */
     fun periodTitle(key: PeriodKey): String {

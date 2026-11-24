@@ -664,6 +664,11 @@ Qase84 likewise combines its Maestro calendar/input/error flow with
 and asserts zero browser launches after offline download preparation. Both Qase84 components passed in
 Qase98. Both components are required for complete case acceptance.
 
+Qase15 combines the Maestro flow `statements/upload_errors` and the required native
+`StatementPickerTest#opensSupportDraftWithCurrentUserAfterRejectedImport`. The native component verifies the
+mail Intent after the user requests support for a rejected import. The case keeps the worst result. A missing
+component makes an otherwise passing case Skipped and is named in the report. A reported failure stays Failed.
+
 ## Test tags
 
 Maestro finds elements by id; in Compose the id is `Modifier.testTag`, exposed as a resource id by
@@ -809,9 +814,9 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | `analytics/chart_month_selection` (mock-only) | whole-column selection including zero expenses, exact month/year, selected state and retained transfer mode/scroll; failed switch and explicit retry (Qase74, FIN-398); authored, not executed |
 | `analytics/all_time` (mock-only) | factual multi-year range, transfer mode, failed switch with explicit retry, import/deletion and final empty state; expense search uses the ASCII query FIN-400 within the inherited 2024–2026 range, checks the single January 2024 debit and retained kind/scope (Qase75, FIN-400/415); follow-up not executed (previous run failed) |
 | `analytics/overview` (smoke) | blocks; independent month/quarter/year selections (August, Q2, year), exact title + selected segment and no error after each switch (FIN-391); «Без переводов», category → operations |
-| `analytics/tooltip_onboarding` | first tooltip opens automatically, closing it scrolls to the second, returning to the screen preserves manual help only ([Qase97](https://app.qase.io/case/PLAINFIN-97), FIN-497) |
-| `analytics/help_bottom_sheet` | a tile and a block tagged `onboarding` and `bottom` open as sheets, then reopen manually. `AnalyticsBlockHelpTest` checks both mixed tag combinations on a tile and its parent block ([Qase101](https://app.qase.io/case/PLAINFIN-101), FIN-554) |
-| `analytics/tooltip_onboarding_interrupted` | after the first tooltip opens, locking interrupts the sequence; unlocking does not replay it, both icons still work, and a clean install follows changed mock server text, tags and order ([Qase98](https://app.qase.io/case/PLAINFIN-98), FIN-497) |
+| `analytics/tooltip_onboarding` | with Assistant enabled, its compact help opens before the daily tile, then the categories card, then balance. Returning to Analytics leaves manual help available. Assistant and category taps still navigate ([Qase97](https://app.qase.io/case/PLAINFIN-97), FIN-552) |
+| `analytics/help_bottom_sheet` | with Assistant disabled, the daily tile and balance block tagged `onboarding` and `bottom` open as sheets in screen order, then reopen manually. Skip is shown during onboarding only. `AnalyticsBlockHelpTest` checks both mixed tag combinations on a tile and its parent block ([Qase101](https://app.qase.io/case/PLAINFIN-101), FIN-554) |
+| `analytics/tooltip_onboarding_interrupted` | lock interrupts the sequence for this account. On a fresh installation with Assistant disabled, the monthly chart comes before the categories card and balance despite the order values in the response. Skip leaves the remaining help available manually, including a tile without the `onboarding` tag ([Qase98](https://app.qase.io/case/PLAINFIN-98), FIN-552) |
 | `analytics/import_preparation_retry` | real UI import before first Analytics VM; finite publication delay shows preparation without upload guidance, then data; bounded wait → timeout, resume preserves timeout and explicit Retry recovers after fixture cleared (Qase63, FIN-394) |
 | `analytics/recalculation_snapshot` + JVM `AnalyticsReliabilityComponentTest#qase82RetainedSnapshotsAndRefusedMutation` (mock-only) | retained ready/unavailable snapshots, bounded polling and explicit retry, uncached Year preparation, refused mutation independent of polling; real journey retains visible errors/payment and exact request guards; required JVM companion covers transferred exhaustive state combinations (Qase82, FIN-473; see docs/qa/fin473-pilot-coverage.md) |
 | `analytics/regular_block_update` (mock-only) | successful PUT removes RBC and promotes the third visible payment row before a ready GET; seven seconds in the same card retain that row without RBC across marked GET polls; bounded polling pauses with September retained, then explicit Retry permits ready GET; separate unknown offline result retains RBC until explicit PUT retry, revealing the scoped row title after error/read notices before the unchanged assertions (Qase81, FIN-416/427/436/478). Its case-level Passed covers these UI observations only; JVM version/context checks and backend post-commit/durable delivery are separate |
@@ -841,7 +846,7 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | `assistant/retry_without_transfers` | `assistant_model_errors=1`: a question asked «Без переводов» fails, not spent; «Повторить» answers it still «без переводов» — FIN-76 |
 | `assistant/answer_retry` | `assistant_model_errors=1`: the answer fails, not spent; a double tap on «Повторить» while the request is on its way sends it once: one answer, no «Не получилось отправить вопрос», 4 of 5 — FIN-75 |
 | `assistant/answer_changed_since` | after an answer a category is changed, then the statement deleted: the earlier answer in the history shows «С тех пор категории менялись», then «С тех пор данные менялись» (`changed_since` counted at the time of the request) — FIN-135 |
-| `statements/upload_errors` | CSV and another-bank server messages, not a statement; leaving the picker (Qase15, FIN-375) |
+| `statements/upload_errors` + native `StatementPickerTest#opensSupportDraftWithCurrentUserAfterRejectedImport` | CSV and another-bank server messages, not a statement; leaving the picker (FIN-375). The native Qase15 companion verifies that a rejected CSV opens the support draft only on request, with the support address, the import-error subject, the same user ID as in the profile draft and no attachment (FIN-551) |
 | `statements/upload_unreadable` | a file with no readable operation: the empty result still shows the unread lines notice; the history row opens «Непрочитанные строки» (line, date, reason) |
 | `statements/upload_amount_overflow` | a small OFX with one valid debit and one amount beyond Long: one unread `bad_amount` line, history/unread navigation and the unchanged valid operation/date/amount ([Qase95](https://app.qase.io/case/PLAINFIN-95), FIN-454); LOCAL Passed 172.089 s on API34/Pixel6/Maestro2.11.0 after explicit cold-backend readiness and UI sign-in, evidence in PR #292; earlier driver/setup failures preserved |
 | `statements/unread_same_physical_line` | two distinct unread operations on physical line 31 with the same `no_date` reason: both row titles/reasons are visible and Back still opens history — FIN-352, [Qase56](https://app.qase.io/case/PLAINFIN-56); authored, not executed |
@@ -878,6 +883,7 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | native `ScreenErrorTransitionTest#profileReadFailureReplacesThemeOutcomeAndRetries` | actual ProfileContent: theme failure → read failure without the old outcome; available Retry restores new profile data; native reader/state injection (Qase66, FIN-396) |
 | native `ScreenErrorTransitionTest#historyReadFailureReplacesDeleteOutcomeAndRetries` | actual HistoryContent: deletion failure → read failure without the old outcome; available Retry refreshes the list without another DELETE; native reader/state injection (Qase67, FIN-396) |
 | native `StatementPickerTest` | login button opens exactly `https://tbank-online.com/login` in an intercepted ACTION_VIEW (FIN-395; Qase16), then upload with a picker result stubbed by Espresso-Intents (on the e2e build the picker is `E2eDocumentPickerActivity`) up to the import result; the `ACTION_OPEN_DOCUMENT` intent itself: Robolectric `PickStatementDocumentTest` |
+| native `ExternalStatementOpenTest#importsAfterSignInOnColdStartAndAgainAfterUnlockOnWarmStart` | typed OFX from another Android app, sign-in and unlock gates, activity recreation without duplicate POST, navigation through the prior result and its unread lines before dismissal, unreadable URI error, and the first-run upload guide at registration ([Qase99](https://app.qase.io/case/PLAINFIN-99), FIN-549) |
 | native `StatementPickerTest#opensPrivacyPolicyBeforeRegistration` | standalone policy link before account creation opens exactly `https://documents.plainfin.ru/privacy` through ACTION_VIEW; no terms/acceptance text or second consent checkbox; returning to registration still allows creation (Qase2, FIN-519/520) |
 | native `StatementPickerTest#opensPrivacyPolicyFromUploadNotice` | «Как мы защищаем данные» in the upload notice opens exactly `https://documents.plainfin.ru/privacy` through ACTION_VIEW; the upload guide remains available after returning (Qase14, FIN-520) |
 
@@ -895,6 +901,39 @@ The unchanged Qase14 Maestro journey was not rerun, so this does not claim a com
 `StatementPickerTest` waits for passcode setup after sign-in without recreating the activity (FIN-63, after the
 FIN-88 session fix). If it stalls, the test fails after 30 seconds and keeps the semantics tree in logcat (`PfTest`)
 and the main-thread latency report in the assertion. The logcat remains in the `e2e-reports` artifact.
+
+FIN-549: native `ExternalStatementOpenTest` sends a synthetic OFX from a separate test APK using an Android
+URI grant. It checks a cold launch followed by sign-in and recreates the activity during the passcode gate
+and after the warm import. It checks exact POST counts before and after recreation and while viewing unread
+lines from the first result. The pending import starts after dismissal of that result. The test also checks
+the existing error for a file without a grant.
+A newly registered user who opens an unavailable file keeps the first-run guide and «Загружу позже».
+The test also checks that closing the guide after an unsupported server time zone dismisses the pending
+selection, and that the same file can then be opened again.
+The system picker still has its own native coverage in `StatementPickerTest`.
+
+Focused JVM tests cover Android replaying the original intent from Recents, keeping one selection without
+reading it or sending a POST after a failed initial config request, and deferring a selection while the
+previous file is being sent or requires resolution of an unknown outcome. A failed initial config requires
+an explicit permitted retry and a verified guide. During an existing import, the latest distinct external
+selection waits while the prior result or recovery is still on screen.
+JVM tests also verify that an open picker has priority over the pending external selection, cancellation
+releases that selection, and a late picker result cannot replace an import being parsed.
+
+The Android 16 Chrome download probe confirmed `ACTION_VIEW` with `content://media/external/downloads/<id>`.
+It kept `application/x-ofx` for an OFX served with that MIME type and `application/octet-stream` for an OFX
+served as generic binary data. The numeric URI path exposes no extension for intent filtering. The display
+name becomes available from the provider after selection. The app declares the OFX MIME type so it is offered
+only for typed content; downloads served with a generic type remain selectable through the in-app picker.
+
+Local validation on 2026-11-24 used an Android 16 (API 36) Pixel 6 emulator. If Gradle cannot resolve its
+additional UTP artifact, install the `mockE2e` app and test APKs and run the focused class through
+AndroidJUnitRunner with an external timeout. Android Package Manager resolved `application/x-ofx` to MainActivity
+and returned no matching activity for `application/octet-stream` or `text/plain` in the app.
+See [Qase99](https://app.qase.io/case/PLAINFIN-99).
+
+Not covered yet (FIN-549): the T-Bank account download itself requires an authenticated test account and a real
+statement response. The Chrome observations above used synthetic attachments.
 
 Not covered yet (FIN-452, FIN-453): an Analytics GET refusal with `retryable:false` after selecting another
 transfer mode, its exact `Retry-After` boundary, and an answer connection lost between a final-status `snapshot`
@@ -918,6 +957,27 @@ offline Retry and recovery through resume followed by explicit Send instead. The
 `ChatViewModelBehaviourTest#offline keeps the question and the retry re-sends it with the same key` covers the
 pending text, exactly two Ask attempts and reuse of the original idempotency key. The foreground online-Retry
 path still needs UI coverage with controllable connectivity that does not pause Chat.
+
+FIN-550: the owner confirmed that Android Recents can show the last main-window thumbnail after app lock.
+`scripts/check-release-screenshot.py` checks a locally signed `mockRelease` on an owned Android
+emulator. Sign in with the existing mock account and open «Операции» with the bundled fixture operation
+«Barsik 29» visible. The Python CI runs five host checks for the prerequisites, screenshot count and deadline.
+It also checks the crop coordinates and contrast threshold with a test double. The integration test that
+decodes real PNGs runs locally with Pillow before release acceptance. With `adb` on PATH and Pillow installed,
+run both commands:
+
+```bash
+python3 -c 'import PIL' &&
+    python3 -m unittest discover -v -s scripts -p 'test_check_release_screenshot.py' &&
+    python3 scripts/check-release-screenshot.py --serial emulator-5554 --avd Test_API36 build/release-operations.png
+```
+
+The host check has a 60 s deadline and requires a new System UI screenshot with visible content over the fixture
+operation.
+
+Not covered yet (FIN-550): regular Android UI CI runs the debuggable `mockE2e` build, where screenshots were
+already allowed before FIN-550. The local `mockRelease` command above verifies the release window. The Qase
+release acceptance case is pending authenticated access.
 
 Dictation UI behavior is authored in native `VoiceDictationTest` /
 [PLAINFIN-69](https://app.qase.io/case/PLAINFIN-69) (FIN-449), using deterministic platform callbacks while retaining
@@ -1357,12 +1417,29 @@ forecast text and dismissal. A JVM Compose test verifies scrolling long help ins
 facts/forecast and chart-selection flows are synchronized from main. Proposed light/dark help and history design
 artboards are authored; approved Figma artboards for these new states do not yet exist.
 
-FIN-497 uses the same anchored help for automatic onboarding when the screen response tags a block or tile with
-`onboarding` and supplies a positive `help_order`. It scrolls to each anchor before opening. A device-local
-DataStore claim per account and screen prevents replay after leaving, locking, relogin or restarting. Unmarked
-help remains manual. The mockE2e-only `analytics_help=manual|onboarding|reversed|bottom` control selects fixed server
-compositions. `manual` is the default for existing flows. `onboarding` marks the daily-expenses tile and
-the balance block, while `reversed` puts balance before the monthly chart and leaves the daily tile manual.
+FIN-552/558 uses anchored help for manual and automatic opening, including the Assistant card and the
+populated expense categories card. Each server block or tile with its own `bottom` tag and help text
+opens a bottom sheet in both cases (FIN-554). Other anchored help uses a compact popup. Server help
+needs a positive `help_order` and the `onboarding` tag to enter the sequence. Composition records placed
+anchors and takes one snapshot in reading order when onboarding starts. It includes offscreen anchors,
+scrolls to each before opening and skips missing anchors. Help from anchors added after the snapshot is
+available manually. «Пропустить подсказки» ends the sequence from either format. A device-local DataStore
+claim prevents replay for the same account and screen after leaving, locking, relogin or restarting.
+
+The mockE2e-only `analytics_help=manual|onboarding|reversed|bottom` control selects fixed server compositions.
+The default `manual` fixture records a completed Analytics onboarding claim for the existing account through
+`fast_login.yaml`. `login.yaml` selects the same fixture after the UI sign-in, and direct UI sign-in flows can
+select it explicitly after signing in. For Qase97/98 set `onboarding` or `reversed` before `fast_login.yaml`
+so the app takes the real first-run path. `onboarding` marks the daily-expenses tile and balance.
+`reversed` gives balance a lower `help_order` than the monthly chart and leaves the daily tile manual.
+`bottom` marks the daily-expenses tile and balance with both tags. The bottom sheet flow selects `bottom`
+and disables Assistant before `fast_login.yaml` so the first two automatic steps are the tile and balance.
+The receipt for `manual` requires a persisted claim for the active login, including after repeated calls.
+Before sign-in, `onboarding`, `reversed` or `bottom` selects the composition for the upcoming fixture login.
+A `sign_in=existing` receipt verifies the new session's claim state, and switching to any automatic
+mode in a session that already claimed onboarding is reported as unmet.
+The preloaded statement covers the first day of October; its operations end in September. Runs that
+assert the categories card first import the bundled October statement through the UI before opening Analytics.
 The mockE2e-only `lock_app=true` control locks the current test session through AppLock.
 
 JVM scenarios cover full-block replacement, version barriers, missing/malformed data, owner changes and late

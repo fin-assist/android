@@ -6,6 +6,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
 import ru.finassist.pf.core.api.model.Block
+import ru.finassist.pf.core.api.model.HelpTags
 import ru.finassist.pf.core.api.model.Tile
 import ru.finassist.pf.core.designsystem.components.PfStatTile
 
@@ -13,12 +14,15 @@ import ru.finassist.pf.core.designsystem.components.PfStatTile
 @Composable
 internal fun BlockTile(block: Block, tile: Tile, ctx: BlockContext, modifier: Modifier, minAmountFontSize: TextUnit = 14.sp) {
     val tag = ctx.tags.tile(tile.id)
-    val key = block.id?.takeIf { it.isNotBlank() && tile.id.isNotBlank() }?.let { listOf(it, tile.id) }
-    val order = onboardingOrder(tile.helpTags, tile.helpOrder)
+    val key = block.id?.takeIf { it.isNotBlank() && tile.id.isNotBlank() && canOnboard(tile.helpTags, tile.helpOrder) }
+        ?.let { listOf(it, tile.id) }
     val help: (@Composable () -> Unit)? = tile.helpText?.takeIf { it.isNotBlank() }?.let { text ->
         {
-            if (ctx.anchoredHelp) HelpPopupButton(text, tile.title, tag, key = key, order = order, tags = tile.helpTags)
-            else BlockHelpButton(text, tile.title, tag)
+            if (ctx.anchoredHelp) {
+                HelpPopupButton(text, tile.title, tag, key = key, showInSheet = HelpTags.BOTTOM in tile.helpTags)
+            } else {
+                BlockHelpButton(text, tile.title, tag)
+            }
         }
     }
     if (!tile.status.hasData) {

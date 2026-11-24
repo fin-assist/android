@@ -4,11 +4,11 @@ tags:
   - analytics
 ---
 - runFlow: ../../subflows/clear_state.yaml
-- runFlow: ../../subflows/fast_login.yaml
 - runFlow:
     file: ../../subflows/config.yaml
     env:
-      LINK: "pfe2e://config?analytics_help=bottom"
+      LINK: "pfe2e://config?analytics_help=bottom&flag.assistant=false"
+- runFlow: ../../subflows/fast_login.yaml
 - tapOn:
     id: "ds.tab.analytics"
 - extendedWaitUntil:
@@ -17,6 +17,8 @@ tags:
     timeout: 15000
 - assertNotVisible:
     id: "analytics.tile.daily.help.popup"
+- assertVisible:
+    id: "analytics.tile.daily.help.sheet.skip"
 - tapOn:
     id: "ds.sheet.close"
 - extendedWaitUntil:
@@ -38,6 +40,8 @@ tags:
     visible:
       id: "analytics.tile.daily.help.sheet"
     timeout: 10000
+- assertNotVisible:
+    id: "analytics.tile.daily.help.sheet.skip"
 - tapOn:
     id: "ds.sheet.close"
 - scrollUntilVisible:

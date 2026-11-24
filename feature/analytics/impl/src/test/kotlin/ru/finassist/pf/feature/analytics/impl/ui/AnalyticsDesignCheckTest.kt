@@ -4,6 +4,7 @@ import ru.finassist.pf.core.common.error.ErrorPresentation
 import ru.finassist.pf.core.common.error.ErrorSeverity
 import ru.finassist.pf.core.common.error.UserMessage
 import ru.finassist.pf.core.api.ApiJson
+import ru.finassist.pf.core.api.RequestOwner
 import ru.finassist.pf.core.api.model.Block
 import ru.finassist.pf.core.api.model.BlockAction
 import ru.finassist.pf.core.common.time.PeriodKey
@@ -63,6 +64,7 @@ class AnalyticsDesignCheckTest {
     private val analyticsState get() = september().state!!
 
     private val blocks = AnalyticsBlocks()
+    private val helpOwner = RequestOwner("design-check-user", "design-check-session")
 
     private fun ui(data: Analytics) = AnalyticsUiState(
         loading = false,
@@ -80,7 +82,6 @@ class AnalyticsDesignCheckTest {
         override fun setPeriodType(type: PeriodTypeCode) = Unit
         override fun goTo(key: PeriodKey) = Unit
         override fun openSheet(sheet: AnalyticsSheet?) = Unit
-        override fun nextHint(stop: Boolean) = Unit
         override fun setTransferMode(mode: TransferMode) = Unit
         override fun currentTransferMode() = mode
         override fun toggleExpanded(id: String) = Unit
@@ -97,7 +98,12 @@ class AnalyticsDesignCheckTest {
     private fun capture(name: String, state: AnalyticsUiState, heightDp: Int, dark: Boolean = false, popups: Boolean = false) =
         DesignCheck.capture(name, dark = dark, heightDp = heightDp, tab = 1, popups = popups) {
             CompositionLocalProvider(LocalPfClock provides clock) {
-                AnalyticsContent(state, actions, Handlers(state.data?.params?.transferMode ?: TransferMode.WITH))
+                AnalyticsContent(
+                    state,
+                    actions,
+                    Handlers(state.data?.params?.transferMode ?: TransferMode.WITH),
+                    claimOnboarding = if (state.owner === helpOwner) ({ true }) else null,
+                )
             }
         }
 
@@ -149,10 +155,16 @@ class AnalyticsDesignCheckTest {
     @Test fun analyticsTransfers() =
         capture("AnalyticsTransfers", ui(september()).copy(sheet = AnalyticsSheet.TRANSFERS), heightDp = 844, popups = true)
 
-    @Test fun analyticsHintCategories() =
-        capture("AnalyticsHintCategories", ui(september()).copy(hint = AnalyticsHint.CATEGORIES), heightDp = 2848)
+    // The current artboards still show the old banners. Capture the real FIN-552 popups in their place.
+    @Test fun analyticsHintAsk() =
+        capture("AnalyticsHintAsk", ui(september()).copy(owner = helpOwner), heightDp = 2848, popups = true)
 
-    @Test fun analyticsHintAsk() = capture("AnalyticsHintAsk", ui(september()).copy(hint = AnalyticsHint.ASK), heightDp = 2848)
+    @Test fun analyticsHintCategories() = capture(
+        "AnalyticsHintCategories",
+        ui(september()).copy(owner = helpOwner, blocks = blocks.copy(assistant = false)),
+        heightDp = 2848,
+        popups = true,
+    )
 
     @Test fun analyticsLimit() =
         capture("AnalyticsLimit", ui(september()).copy(limit = AssistantLimit(remaining = 0, dailyMax = 5, resetsAt = day(9, 27))), heightDp = 2872)

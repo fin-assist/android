@@ -1,19 +1,19 @@
 appId: ru.finassist.pf.mock.e2e
-name: Аналитика — прерывание онбординга и новый порядок на чистой установке
+name: Аналитика — прерывание, порядок без карточки помощника и пропуск подсказок
 tags:
   - analytics
 ---
 - runFlow: ../../subflows/clear_state.yaml
-- runFlow: ../../subflows/fast_login.yaml
 - runFlow:
     file: ../../subflows/config.yaml
     env:
       LINK: "pfe2e://config?analytics_help=onboarding"
+- runFlow: ../../subflows/fast_login.yaml
 - tapOn:
     id: "ds.tab.analytics"
 - extendedWaitUntil:
     visible:
-      id: "analytics.tile.daily.help.popup"
+      id: "analytics.ask.help.popup"
     timeout: 15000
 - runFlow:
     file: ../../subflows/config.yaml
@@ -24,9 +24,9 @@ tags:
       id: "applock.unlock"
     timeout: 15000
 - assertNotVisible:
-    id: "analytics.tile.daily.help.popup"
+    id: "analytics.ask.help.popup"
 - assertNotVisible:
-    id: "analytics.block.balance.help.popup"
+    id: "analytics.tile.daily.help.popup"
 - runFlow:
     file: ../../subflows/enter_code.yaml
     env:
@@ -36,25 +36,13 @@ tags:
       id: "analytics.screen"
     timeout: 15000
 - assertNotVisible:
-    id: "analytics.tile.daily.help.popup"
+    id: "analytics.ask.help.popup"
 - assertNotVisible:
-    id: "analytics.block.balance.help.popup"
-- tapOn:
-    id: "ds.tab.operations"
-- extendedWaitUntil:
-    visible:
-      id: "operations.feed"
-    timeout: 10000
-- tapOn:
-    id: "ds.tab.analytics"
-- extendedWaitUntil:
-    visible:
+    id: "analytics.tile.daily.help.popup"
+- scrollUntilVisible:
+    element:
       id: "analytics.tile.daily.help"
-    timeout: 15000
-- assertNotVisible:
-    id: "analytics.tile.daily.help.popup"
-- assertNotVisible:
-    id: "analytics.block.balance.help.popup"
+    centerElement: true
 - tapOn:
     id: "analytics.tile.daily.help"
 - assertVisible:
@@ -63,38 +51,52 @@ tags:
 - scrollUntilVisible:
     element:
       id: "analytics.block.balance.help"
-    direction: DOWN
 - tapOn:
     id: "analytics.block.balance.help"
 - assertVisible:
     id: "analytics.block.balance.help.popup"
+- back
 
-# Clearing app data models a fresh installation, with the same existing mock account.
+# The clean installation orders monthly chart before balance, although the server gives balance help_order=1.
 - runFlow: ../../subflows/clear_state.yaml
-- runFlow: ../../subflows/fast_login.yaml
 - runFlow:
     file: ../../subflows/config.yaml
     env:
-      LINK: "pfe2e://config?analytics_help=reversed"
-- tapOn:
-    id: "ds.tab.analytics"
-- extendedWaitUntil:
-    visible:
-      id: "analytics.block.balance.help.popup"
-    timeout: 15000
-- assertVisible: "Разница показывает, сколько осталось после расходов."
-- assertNotVisible:
-    id: "analytics.tile.daily.help.popup"
-- back
+      LINK: "pfe2e://config?analytics_help=reversed&flag.assistant=false"
+- runFlow: ../../subflows/fast_login.yaml
+# Load real October categories before claiming the first Analytics visit.
+- runFlow: ../../subflows/import_october_to_analytics.yaml
 - extendedWaitUntil:
     visible:
       id: "analytics.block.monthly_chart.help.popup"
     timeout: 15000
+- assertNotVisible:
+    id: "analytics.block.balance.help.popup"
+- back
+- extendedWaitUntil:
+    visible:
+      id: "analytics.block.expense_categories.help.popup"
+    timeout: 15000
+- tapOn:
+    id: "analytics.block.expense_categories.help.popup.skip"
+- assertNotVisible:
+    id: "analytics.block.balance.help.popup"
+- scrollUntilVisible:
+    element:
+      id: "analytics.block.balance.help"
+    direction: DOWN
+    centerElement: true
+- tapOn:
+    id: "analytics.block.balance.help"
+- assertVisible: "Разница показывает, сколько осталось после расходов."
 - back
 - scrollUntilVisible:
     element:
       id: "analytics.tile.daily.help"
     direction: UP
+    centerElement: true
+- assertNotVisible:
+    id: "analytics.ask.help"
 - tapOn:
     id: "analytics.tile.daily.help"
 - assertVisible:
