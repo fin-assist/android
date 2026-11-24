@@ -97,7 +97,7 @@
                 {
                   "path": ".maestro/flows/operations/feed_and_detail.yaml",
                   "line": 20,
-                  "detail": "- assertVisible: \"Из выписки\""
+                  "detail": "- assertVisible: \"Об операции\""
                 },
                 {
                   "path": ".maestro/flows/operations/feed_and_detail.yaml",
@@ -134,7 +134,7 @@
                 {
                   "path": ".maestro/flows/operations/feed_and_detail.yaml",
                   "line": 20,
-                  "detail": "- assertVisible: \"Из выписки\""
+                  "detail": "- assertVisible: \"Об операции\""
                 },
                 {
                   "path": ".maestro/flows/operations/feed_and_detail.yaml",

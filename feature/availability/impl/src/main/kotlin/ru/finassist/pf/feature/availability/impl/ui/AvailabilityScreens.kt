@@ -95,7 +95,7 @@ internal fun UpdateContent(onUpdate: () -> Unit, onSupport: () -> Unit, presenta
     subtitle = "Эта версия больше не поддерживается",
     subtitleTag = null,
     head = "Что сделать",
-    body = "Установите новую версию. Выписки, операции и настройки сохранятся — входить заново не придётся.",
+    body = "Установите новую версию. Операции и настройки сохранятся.",
     action = { PfButton("Обновить", onClick = onUpdate, variant = ButtonVariant.PRIMARY, block = true, modifier = Modifier.testTag(AvailabilityTags.UPDATE_BUTTON)) },
     support = { PfLink("Написать в поддержку", onClick = onSupport, modifier = Modifier.testTag(AvailabilityTags.UPDATE_SUPPORT)) },
 )
