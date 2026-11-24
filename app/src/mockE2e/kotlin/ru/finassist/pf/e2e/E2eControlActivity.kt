@@ -119,7 +119,7 @@ class E2eControlActivity : ComponentActivity() {
         val signIn = E2eSignIn(
             authApi = authApi,
             session = session,
-            startSession = { tokens -> sessionImpl.start(userId = null, tokens = tokens, registered = false) },
+            startSession = { userId, tokens -> sessionImpl.start(userId, tokens, registered = false) },
             appLock = appLock,
             prepareFixture = { backend.ready.await() },
         )

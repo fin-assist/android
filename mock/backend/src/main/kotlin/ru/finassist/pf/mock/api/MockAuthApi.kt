@@ -47,8 +47,8 @@ class MockAuthApi(private val backend: MockBackend) : AuthApi {
 
     private class Verification(val receipt: ConsentReceipt, val createdAt: OffsetDateTime, val expiresAt: OffsetDateTime) {
         val phone get() = receipt.request.phone
-        var registrationToken: String? = null
         var verifiedAt: OffsetDateTime? = null
+        var verifiedEvent: PhoneVerificationStatusEvent? = null
         var consumed = false
     }
 
@@ -119,16 +119,18 @@ class MockAuthApi(private val backend: MockBackend) : AuthApi {
         backend.droppable(verificationEvents(verificationToken)) { it.status != VerificationStatus.PENDING }
 
     private fun verificationEvents(verificationToken: String): Flow<PhoneVerificationStatusEvent> = flow {
-        val v = backend.mutex.withLock { verifications[verificationToken] }
-            ?: throw backend.unauthorizedError(ErrorCodes.INVALID_TOKEN)
-        if (v.consumed) throw backend.unauthorizedError(ErrorCodes.INVALID_TOKEN)
+        val (v, alreadyVerified) = backend.mutex.withLock {
+            val stored = verifications[verificationToken]?.takeUnless { it.consumed }
+                ?: throw backend.unauthorizedError(ErrorCodes.INVALID_TOKEN)
+            stored to (stored.verifiedAt != null)
+        }
         val verifiedAt = v.createdAt.plusNanos(backend.config.callVerifyDelayMs * 1_000_000)
         val now = backend.now()
-        if (v.verifiedAt == null && !now.isBefore(v.expiresAt)) {
+        if (!alreadyVerified && !now.isBefore(v.expiresAt)) {
             emit(PhoneVerificationStatusEvent(status = VerificationStatus.EXPIRED))
             return@flow
         }
-        if (now.isBefore(verifiedAt)) {
+        if (!alreadyVerified && now.isBefore(verifiedAt)) {
             emit(PhoneVerificationStatusEvent(status = VerificationStatus.PENDING))
             // A call that would come after the request's end never comes: the open stream ends with `expired`.
             if (verifiedAt.isAfter(v.expiresAt)) {
@@ -141,31 +143,33 @@ class MockAuthApi(private val backend: MockBackend) : AuthApi {
         emit(verified(v))
     }
 
-    private suspend fun verified(v: Verification): PhoneVerificationStatusEvent {
-        backend.mutex.withLock { if (v.verifiedAt == null) v.verifiedAt = backend.now() }
-        if (!backend.now().isBefore(checkNotNull(v.verifiedAt).plusMinutes(15))) throw backend.unauthorizedError(ErrorCodes.INVALID_TOKEN)
-        val isNew = v.phone != backend.config.existingPhone && backend.profile.phone != v.phone
-        return if (isNew) {
-            val token = backend.mutex.withLock {
-                v.registrationToken ?: secret("reg_").also { t -> v.registrationToken = t; registrationTokens[t] = v }
-            }
-            PhoneVerificationStatusEvent(status = VerificationStatus.VERIFIED, isNewUser = true, registrationToken = token)
-        } else {
-            val tokens = issueTokens()
-            backend.mutex.withLock {
+    private suspend fun verified(v: Verification): PhoneVerificationStatusEvent = backend.mutex.withLock {
+        val now = backend.now()
+        val verifiedAt = v.verifiedAt ?: now.also { v.verifiedAt = it }
+        if (v.consumed || !now.isBefore(verifiedAt.plusMinutes(15))) throw backend.unauthorizedError(ErrorCodes.INVALID_TOKEN)
+        v.verifiedEvent ?: run {
+            val isNew = v.phone != backend.config.existingPhone && backend.profile.phone != v.phone
+            val event = if (isNew) {
+                val token = secret("reg_")
+                registrationTokens[token] = v
+                PhoneVerificationStatusEvent(status = VerificationStatus.VERIFIED, isNewUser = true, registrationToken = token)
+            } else {
                 if (backend.profile.userId.isEmpty()) backend.profile = backend.emptyProfile(v.phone, backend.newUserId())
                 v.receipt.accountId = backend.profile.userId
+                val tokens = issueTokensLocked()
+                PhoneVerificationStatusEvent(
+                    status = VerificationStatus.VERIFIED, isNewUser = false,
+                    accessToken = tokens.accessToken, refreshToken = tokens.refreshToken, userId = backend.profile.userId,
+                )
             }
-            PhoneVerificationStatusEvent(
-                status = VerificationStatus.VERIFIED, isNewUser = false,
-                accessToken = tokens.accessToken, refreshToken = tokens.refreshToken,
-            )
+            v.verifiedEvent = event
+            event
         }
     }
 
-    private suspend fun issueTokens(): TokenPair {
+    private fun issueTokensLocked(): TokenPair {
         val refresh = secret("rt_")
-        backend.mutex.withLock { refreshTokens += refresh }
+        refreshTokens += refresh
         return TokenPair(accessToken = "mock.${UUID.randomUUID()}", refreshToken = refresh)
     }
 
@@ -199,9 +203,11 @@ class MockAuthApi(private val backend: MockBackend) : AuthApi {
     override suspend fun refreshTokens(key: IdempotencyKey, refreshToken: String): TokenPair {
         backend.simulateNetwork()
         return backend.idempotent("auth.token:${key.value}", request = refreshToken) {
-            val known = backend.mutex.withLock { refreshTokens.remove(refreshToken) }
-            if (!known) throw backend.unauthorizedError(ErrorCodes.TOKEN_REVOKED)
-            issueTokens()
+            backend.mutex.withLock {
+                if (!refreshTokens.remove(refreshToken)) throw backend.unauthorizedError(ErrorCodes.TOKEN_REVOKED)
+                verifications.values.firstOrNull { it.verifiedEvent?.refreshToken == refreshToken }?.consumed = true
+                issueTokensLocked()
+            }
         }
     }
 

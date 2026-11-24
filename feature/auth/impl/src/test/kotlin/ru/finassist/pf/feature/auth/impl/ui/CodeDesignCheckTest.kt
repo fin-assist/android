@@ -12,6 +12,7 @@ import ru.finassist.pf.feature.auth.impl.domain.PhoneFormat
  * +7 495 000-00-00. FIN-166 states (artboards FIN-173): `CodeChecking`, `CodeCheckingDark` — the device deadline
  * passed, the number is gone until the stream answers; `CodeNoDeadline`, `CodeNoDeadlineDark` — waiting without a time
  * (no `expires_in` and no `Date`, or `pending` after the device deadline).
+ * `CodeConfirming` is compared with the FIN-560 Figma frame at node `200:5684`.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
@@ -26,6 +27,8 @@ class CodeDesignCheckTest {
     @Test fun code() = capture("Code")
 
     @Test fun codeDark() = capture("CodeDark", dark = true)
+
+    @Test fun codeConfirming() = capture("CodeConfirming", state.copy(confirmingNumber = true))
 
     @Test fun codeExpired() = capture("CodeExpired", state.copy(phase = CallPhase.EXPIRED))
 

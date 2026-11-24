@@ -30,7 +30,7 @@ import ru.finassist.pf.feature.auth.api.SessionState
 class E2eSignIn(
     private val authApi: AuthApi,
     private val session: SessionRepository,
-    private val startSession: suspend (TokenPair) -> Unit,
+    private val startSession: suspend (String, TokenPair) -> Unit,
     private val appLock: AppLock,
     private val timeoutMs: Long = TIMEOUT_MS,
     private val prepareFixture: suspend () -> Unit = {},
@@ -65,7 +65,9 @@ class E2eSignIn(
         val access = result.accessToken
         val refresh = result.refreshToken
         if (access == null || refresh == null) return "verified without tokens"
-        startSession(TokenPair(access, refresh))
+        val userId = result.userId
+        if (userId.isNullOrEmpty()) return "verified without user ID"
+        startSession(userId, TokenPair(access, refresh))
         session.state.first { it is SessionState.SignedIn }
         appLock.setPasscode(passcode)
         appLock.state.first { it == LockState.Unlocked }

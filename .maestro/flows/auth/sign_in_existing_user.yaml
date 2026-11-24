@@ -26,7 +26,7 @@ tags:
 - runFlow:
     file: ../../subflows/config.yaml
     env:
-      LINK: "pfe2e://config?call_delay_ms=6000"
+      LINK: "pfe2e://config?call_delay_ms=45000"
 - runFlow:
     file: ../../subflows/sign_in.yaml
     env:
@@ -37,6 +37,30 @@ tags:
     timeout: 10000
 - assertVisible:
     id: "auth.call.dial"
+- tapOn:
+    id: "auth.call.dial"
+- assertNotVisible:
+    id: "auth.call.dial"
+# Bring the same sign-in activity to the foreground regardless of the dialer's back stack.
+- pressKey: HOME
+- launchApp:
+    stopApp: false
+- extendedWaitUntil:
+    visible:
+      id: "auth.call.confirming"
+    timeout: 5000
+- assertVisible: "Вход продолжится автоматически"
+- assertVisible:
+    id: "auth.call.dial"
+- scrollUntilVisible:
+    element:
+      id: "auth.call.change_number"
+- assertVisible:
+    id: "auth.call.change_number"
+- extendedWaitUntil:
+    visible:
+      id: "applock.setup"
+    timeout: 55000
 - runFlow: ../../subflows/set_passcode.yaml
 - extendedWaitUntil:
     visible:
