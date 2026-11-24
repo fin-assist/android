@@ -15,8 +15,8 @@ import java.time.YearMonth
 import java.time.ZoneId
 
 /** How an operation row looks; pure, so the rules (sign, colour, subtitle) are unit-tested. */
-/** A row of the «Из выписки» card of the operation; [spoken] — how a screen reader names an account. */
-data class StatementRow(val label: String, val value: String, val sublabel: String? = null, val spoken: String? = null)
+/** A row of the «Об операции» card of the operation; [spoken] — how a screen reader names an account. */
+data class StatementRow(val label: String, val value: String, val spoken: String? = null)
 
 data class RowModel(
     val id: String,
@@ -104,7 +104,7 @@ object OperationFormat {
             }
 
     /**
-     * «Из выписки» (mockup `Detail`): accounts (a transfer names both sides), what the statement says and the bank's
+     * «Об операции» (mockup `Detail`): accounts (a transfer names both sides), what the statement says and the bank's
      * category; posting time ([dateTime] formats it) and MCC when the bank sent them. A transfer's bank category is
      * labelled «В выписке».
      */
@@ -118,9 +118,9 @@ object OperationFormat {
         } else {
             account("Счёт", op.account)
         }
-        op.description?.takeIf { it.isNotBlank() }?.let { add(StatementRow("Описание в выписке", it)) }
+        op.description?.takeIf { it.isNotBlank() }?.let { add(StatementRow("Описание", it)) }
         op.bankCategory?.let {
-            add(if (op.kind == OperationKind.OWN_TRANSFER) StatementRow("В выписке", it) else StatementRow("Категория банка", it, sublabel = "как в выписке"))
+            add(if (op.kind == OperationKind.OWN_TRANSFER) StatementRow("В выписке", it) else StatementRow("Категория банка", it))
         }
         op.postedAt?.let { add(StatementRow("Проведена банком", dateTime(it))) }
         op.mcc?.let { add(StatementRow("MCC", it)) }

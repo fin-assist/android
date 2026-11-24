@@ -17,7 +17,7 @@ tags:
     id: "operations.detail.title"
     containsDescendants:
       - text: "Пополнение брокерского счета"
-- assertVisible: "Из выписки"
+- assertVisible: "Об операции"
 # The timestamp is visible in the hero, not only present in the transport request.
 - assertVisible: '30\.09\.2026, 17:53'
 - runFlow:
