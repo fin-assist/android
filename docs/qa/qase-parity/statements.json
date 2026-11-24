@@ -1674,7 +1674,7 @@
             },
             {
               "path": ".maestro/flows/statements/upload_offline_retry.yaml",
-              "line": 55,
+              "line": 58,
               "detail": "offline=true"
             }
           ],
@@ -1703,12 +1703,12 @@
             },
             {
               "path": ".maestro/flows/statements/upload_offline_retry.yaml",
-              "line": 60,
+              "line": 63,
               "detail": "tapOn statements.upload.pick"
             },
             {
               "path": ".maestro/flows/statements/upload_offline_retry.yaml",
-              "line": 33,
+              "line": 36,
               "detail": "id: \"statements.upload.fallback\""
             }
           ],
@@ -1718,32 +1718,32 @@
               "evidence": [
                 {
                   "path": ".maestro/flows/statements/upload_offline_retry.yaml",
-                  "line": 35,
+                  "line": 38,
                   "detail": "visible: \"Если файл не скачивается\""
                 },
                 {
                   "path": ".maestro/flows/statements/upload_offline_retry.yaml",
-                  "line": 37,
+                  "line": 40,
                   "detail": "Скачайте выписку вручную"
                 },
                 {
                   "path": ".maestro/flows/statements/upload_offline_retry.yaml",
-                  "line": 38,
+                  "line": 41,
                   "detail": "Версия для ПК"
                 },
                 {
                   "path": ".maestro/flows/statements/upload_offline_retry.yaml",
-                  "line": 39,
+                  "line": 42,
                   "detail": "Откройте «Операции»"
                 },
                 {
                   "path": ".maestro/flows/statements/upload_offline_retry.yaml",
-                  "line": 40,
+                  "line": 43,
                   "detail": "Нажмите значок загрузки"
                 },
                 {
                   "path": ".maestro/flows/statements/upload_offline_retry.yaml",
-                  "line": 41,
+                  "line": 44,
                   "detail": "Выберите скачанный файл"
                 }
               ],
@@ -1757,7 +1757,7 @@
           "action_evidence": [
             {
               "path": ".maestro/flows/statements/upload_offline_retry.yaml",
-              "line": 43,
+              "line": 46,
               "detail": "id: \"statements.upload.fallback.ok\""
             }
           ],
@@ -1767,12 +1767,12 @@
               "evidence": [
                 {
                   "path": ".maestro/flows/statements/upload_offline_retry.yaml",
-                  "line": 45,
+                  "line": 48,
                   "detail": "notVisible: \"Если файл не скачивается\""
                 },
                 {
                   "path": ".maestro/flows/statements/upload_offline_retry.yaml",
-                  "line": 49,
+                  "line": 52,
                   "detail": "id: \"statements.upload\""
                 }
               ],
@@ -1786,12 +1786,12 @@
           "action_evidence": [
             {
               "path": ".maestro/flows/statements/upload_offline_retry.yaml",
-              "line": 55,
+              "line": 58,
               "detail": "offline=true"
             },
             {
               "path": ".maestro/flows/statements/upload_offline_retry.yaml",
-              "line": 62,
+              "line": 65,
               "detail": "id: \"e2e.picker.october.ofx\""
             }
           ],
@@ -1801,32 +1801,32 @@
               "evidence": [
                 {
                   "path": ".maestro/flows/statements/upload_offline_retry.yaml",
-                  "line": 65,
+                  "line": 68,
                   "detail": "id: \"statements.upload.send_offline\""
                 },
                 {
                   "path": ".maestro/flows/statements/upload_offline_retry.yaml",
-                  "line": 68,
+                  "line": 71,
                   "detail": "text: \"Не удаётся подключиться к серверу\""
                 },
                 {
                   "path": ".maestro/flows/statements/upload_offline_retry.yaml",
-                  "line": 72,
+                  "line": 75,
                   "detail": "Файл не загружен.*Проверьте интернет"
                 },
                 {
                   "path": ".maestro/flows/statements/upload_offline_retry.yaml",
-                  "line": 80,
+                  "line": 83,
                   "detail": "Попробуйте отключить VPN"
                 },
                 {
                   "path": ".maestro/flows/statements/upload_offline_retry.yaml",
-                  "line": 77,
+                  "line": 80,
                   "detail": "enabled: true"
                 },
                 {
                   "path": ".maestro/flows/statements/upload_offline_retry.yaml",
-                  "line": 79,
+                  "line": 82,
                   "detail": "id: \"statements.upload\""
                 }
               ],
@@ -1838,7 +1838,7 @@
               "evidence": [
                 {
                   "path": ".maestro/flows/statements/upload_offline_retry.yaml",
-                  "line": 84,
+                  "line": 87,
                   "detail": "expect_statement_upload_requests=1&expect_statement_upload_keys=1"
                 },
                 {
@@ -1862,12 +1862,12 @@
           "action_evidence": [
             {
               "path": ".maestro/flows/statements/upload_offline_retry.yaml",
-              "line": 91,
+              "line": 94,
               "detail": "offline=false"
             },
             {
               "path": ".maestro/flows/statements/upload_offline_retry.yaml",
-              "line": 96,
+              "line": 99,
               "detail": "id: \"statements.upload.send_retry\""
             }
           ],
@@ -1877,12 +1877,12 @@
               "evidence": [
                 {
                   "path": ".maestro/flows/statements/upload_offline_retry.yaml",
-                  "line": 102,
+                  "line": 105,
                   "detail": "id: \"statements.result.new\""
                 },
                 {
                   "path": ".maestro/flows/statements/upload_offline_retry.yaml",
-                  "line": 106,
+                  "line": 109,
                   "detail": "expect_statement_upload_requests=2&expect_statement_upload_keys=1"
                 },
                 {

@@ -29,6 +29,9 @@ tags:
     timeout: 10000
 
 # «Не скачивается?» opens the manual export steps in a sheet; «Понятно» closes it.
+- scrollUntilVisible:
+    element:
+      id: "statements.upload.fallback"
 - tapOn:
     id: "statements.upload.fallback"
 - extendedWaitUntil:
