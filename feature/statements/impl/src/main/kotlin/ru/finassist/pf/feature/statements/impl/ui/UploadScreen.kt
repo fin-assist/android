@@ -79,7 +79,8 @@ fun UploadScreen(
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    val picker = rememberLauncherForActivityResult(PickStatementDocument()) { uri -> if (uri != null) vm.onFilePicked(uri) }
+    val picker = rememberLauncherForActivityResult(PickStatementDocument(), onResult = vm::onFilePicked)
+    val pickFile: () -> Unit = { if (vm.beginFilePick()) picker.launch(arrayOf("*/*")) }
 
     LaunchedEffect(state.doneUploadId) {
         val id = state.doneUploadId ?: return@LaunchedEffect
@@ -104,8 +105,8 @@ fun UploadScreen(
         onRetry = vm::load,
         onShowFallback = vm::showFallback,
         onOpenUrl = { url -> openUrl(context, url) },
-        onPick = { picker.launch(arrayOf("*/*")) },
-        onPickAnother = { vm.backToGuide(); picker.launch(arrayOf("*/*")) },
+        onPick = pickFile,
+        onPickAnother = pickFile,
         onBackToGuide = vm::backToGuide,
         onAskCancel = vm::askCancel,
         onCancelImport = vm::cancelImport,

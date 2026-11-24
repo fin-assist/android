@@ -267,8 +267,8 @@ private fun MainLayer(
             return@LaunchedEffect
         }
         if (externalStatement == null) return@LaunchedEffect
-        // Keep the current upload, recovery, or result visible. The upload screen watches the latest selection.
-        if (destination.hasRoute<StatementsRoutes.Upload>() || destination.hasRoute<StatementsRoutes.Result>()) {
+        // The current upload and its result can have child screens on top of them.
+        if (controller.hasBackStackEntry<StatementsRoutes.Upload>() || controller.hasBackStackEntry<StatementsRoutes.Result>()) {
             return@LaunchedEffect
         }
         // Leaving a guide opened for this selection dismisses it without reading the file.
@@ -314,4 +314,11 @@ private fun MainLayer(
             )
         }
     }
+}
+
+private inline fun <reified T : Any> NavController.hasBackStackEntry(): Boolean = try {
+    getBackStackEntry<T>()
+    true
+} catch (_: IllegalArgumentException) {
+    false
 }

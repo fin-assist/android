@@ -88,6 +88,7 @@ data class UploadUiState(
     val periodDownloading: Boolean = false,
     val periodRetryReady: Boolean = true,
     val configRetryReady: Boolean = true,
+    val awaitingFilePicker: Boolean = false,
     val sourceZoneUnsupported: Boolean = false,
     val periodError: ErrorPresentation? = null,
     val periodFrom: LocalDate? = null,
@@ -228,10 +229,22 @@ class UploadViewModel @Inject constructor(
     fun consumeDownload() = _state.update { it.copy(downloadUrlToOpen = null) }
 
 
-    fun onFilePicked(uri: Uri) {
-        if (uploadInFlight) return
-        launchUpload(uri)
+    fun beginFilePick(): Boolean {
+        val current = _state.value
+        if (current.awaitingFilePicker || !canStartPickedFile(current)) return false
+        _state.update { it.copy(awaitingFilePicker = true) }
+        if (current.phase is UploadPhase.Error) backToGuide()
+        return true
     }
+
+    fun onFilePicked(uri: Uri?) {
+        if (uri != null && canStartPickedFile(_state.value)) launchUpload(uri)
+        // Keep the picker priority until its selected file has started, or selection was cancelled.
+        _state.update { it.copy(awaitingFilePicker = false) }
+    }
+
+    private fun canStartPickedFile(state: UploadUiState) =
+        !uploadInFlight && state.phase !is UploadPhase.Busy && state.doneUploadId == null
 
     /** Wait for a verified guide without replacing the current upload, its result or its retry. */
     suspend fun onExternalFilePicked(takeSelection: () -> Uri?) {
@@ -256,7 +269,7 @@ class UploadViewModel @Inject constructor(
 
     private fun canTakeExternalFile(state: UploadUiState) =
         state.phase is UploadPhase.Guide && config != null && state.guideErrorPresentation == null &&
-            !state.uploadOffline && !state.sourceZoneUnsupported && state.doneUploadId == null
+            !state.uploadOffline && !state.sourceZoneUnsupported && state.doneUploadId == null && !state.awaitingFilePicker
 
     /** Explicit new intent after the unknown-outcome warning; ordinary retry never replaces the old UUID. */
     fun startNewUpload() {

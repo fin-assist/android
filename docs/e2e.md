@@ -876,7 +876,7 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | native `ScreenErrorTransitionTest#profileReadFailureReplacesThemeOutcomeAndRetries` | actual ProfileContent: theme failure → read failure without the old outcome; available Retry restores new profile data; native reader/state injection (Qase66, FIN-396) |
 | native `ScreenErrorTransitionTest#historyReadFailureReplacesDeleteOutcomeAndRetries` | actual HistoryContent: deletion failure → read failure without the old outcome; available Retry refreshes the list without another DELETE; native reader/state injection (Qase67, FIN-396) |
 | native `StatementPickerTest` | login button opens exactly `https://tbank-online.com/login` in an intercepted ACTION_VIEW (FIN-395; Qase16), then upload with a picker result stubbed by Espresso-Intents (on the e2e build the picker is `E2eDocumentPickerActivity`) up to the import result; the `ACTION_OPEN_DOCUMENT` intent itself: Robolectric `PickStatementDocumentTest` |
-| native `ExternalStatementOpenTest#importsAfterSignInOnColdStartAndAgainAfterUnlockOnWarmStart` | typed OFX from another Android app, sign-in and unlock gates, activity recreation before and after import without duplicate POST, the prior result retained until dismissal, unreadable URI error, and the first-run upload guide retained at registration ([Qase99](https://app.qase.io/case/PLAINFIN-99), FIN-549) |
+| native `ExternalStatementOpenTest#importsAfterSignInOnColdStartAndAgainAfterUnlockOnWarmStart` | typed OFX from another Android app, sign-in and unlock gates, activity recreation without duplicate POST, navigation through the prior result and its unread lines before dismissal, unreadable URI error, and the first-run upload guide at registration ([Qase99](https://app.qase.io/case/PLAINFIN-99), FIN-549) |
 | native `StatementPickerTest#opensPrivacyPolicyBeforeRegistration` | standalone policy link before account creation opens exactly `https://documents.plainfin.ru/privacy` through ACTION_VIEW; no terms/acceptance text or second consent checkbox; returning to registration still allows creation (Qase2, FIN-519/520) |
 | native `StatementPickerTest#opensPrivacyPolicyFromUploadNotice` | «Как мы защищаем данные» in the upload notice opens exactly `https://documents.plainfin.ru/privacy` through ACTION_VIEW; the upload guide remains available after returning (Qase14, FIN-520) |
 
@@ -897,8 +897,9 @@ and the main-thread latency report in the assertion. The logcat remains in the `
 
 FIN-549: native `ExternalStatementOpenTest` sends a synthetic OFX from a separate test APK using an Android
 URI grant. It checks a cold launch followed by sign-in and recreates the activity during the passcode gate
-and after the warm import. It checks exact POST counts before and after recreation, waits for dismissal of
-the first result before the pending import starts, and checks the existing error for a file without a grant.
+and after the warm import. It checks exact POST counts before and after recreation and while viewing unread
+lines from the first result. The pending import starts after dismissal of that result. The test also checks
+the existing error for a file without a grant.
 A newly registered user who opens an unavailable file keeps the first-run guide and «Загружу позже».
 The test also checks that closing the guide after an unsupported server time zone dismisses the pending
 selection, and that the same file can then be opened again.
@@ -909,6 +910,8 @@ reading it or sending a POST after a failed initial config request, and deferrin
 previous file is being sent or requires resolution of an unknown outcome. A failed initial config requires
 an explicit permitted retry and a verified guide. During an existing import, the latest distinct external
 selection waits while the prior result or recovery is still on screen.
+JVM tests also verify that an open picker has priority over the pending external selection, cancellation
+releases that selection, and a late picker result cannot replace an import being parsed.
 
 The Android 16 Chrome download probe confirmed `ACTION_VIEW` with `content://media/external/downloads/<id>`.
 It kept `application/x-ofx` for an OFX served with that MIME type and `application/octet-stream` for an OFX

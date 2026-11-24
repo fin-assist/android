@@ -294,6 +294,68 @@ class UploadViewModelTest {
         assertEquals(3, api.keys.toSet().size)
     }
 
+    @Test fun `choosing another file from the error screen takes priority over an external selection`() {
+        api.uploadFailures += AppError.Server(500)
+        vm = newViewModel(fileContext = contextWithExternalReadGrant())
+        vm.onFilePicked(uri)
+        await("the first failure") { it.phase is UploadPhase.Error }
+        awaitIdle()
+        val manual = Uri.parse("content://test/manual.ofx")
+        shadowOf(context.contentResolver).registerInputStreamSupplier(manual) {
+            ByteArrayInputStream("OFXHEADER:200".toByteArray())
+        }
+        var taken = false
+
+        runBlocking {
+            val external = launch(Dispatchers.Main, start = CoroutineStart.UNDISPATCHED) {
+                vm.onExternalFilePicked {
+                    taken = true
+                    Uri.parse("content://test/pending.ofx")
+                }
+            }
+            assertTrue(vm.beginFilePick())
+            assertIs<UploadPhase.Guide>(vm.state.value.phase)
+            assertFalse(taken)
+            assertEquals(listOf(name), api.names)
+
+            vm.onFilePicked(manual)
+            awaitAccepted()
+            awaitIdle()
+            vm.onFilePicked(uri) // Late callback after 202 cannot replace the upload being parsed.
+            assertFalse(vm.uploadInFlight)
+            assertFalse(taken)
+            assertFalse(vm.state.value.awaitingFilePicker)
+            assertEquals(listOf(name, "manual.ofx"), api.names)
+            assertEquals("manual.ofx", assertIs<UploadPhase.Busy>(vm.state.value.phase).fileName)
+            external.cancelAndJoin()
+        }
+    }
+
+    @Test fun `cancelling the ordinary picker releases the pending external selection`() {
+        vm = newViewModel(fileContext = contextWithExternalReadGrant())
+        assertTrue(vm.beginFilePick())
+        assertFalse(vm.beginFilePick(), "a picker result is already pending")
+        var taken = false
+
+        runBlocking {
+            val external = launch(Dispatchers.Main, start = CoroutineStart.UNDISPATCHED) {
+                vm.onExternalFilePicked {
+                    taken = true
+                    uri
+                }
+            }
+            assertFalse(taken)
+            assertTrue(api.keys.isEmpty())
+            vm.onFilePicked(null)
+            withTimeout(10_000) { external.join() }
+        }
+
+        awaitAccepted()
+        assertTrue(taken)
+        assertFalse(vm.state.value.awaitingFilePicker)
+        assertEquals(listOf(name), api.names)
+    }
+
     private fun contextWithExternalReadGrant() = object : ContextWrapper(context) {
         override fun checkUriPermission(uri: Uri, pid: Int, uid: Int, modeFlags: Int) =
             PackageManager.PERMISSION_GRANTED
@@ -754,10 +816,12 @@ class UploadViewModelTest {
     }
 
     @Test fun `an accepted file is a final answer - the same file later is a new upload`() {
+        api.streams += flowOf(ImportEvent.Complete(importResult(newCount = 1)))
         vm.onFilePicked(uri)
-        awaitAccepted()
+        await("the first result") { it.doneUploadId == "u1" }
         assertTrue(Events.STATEMENTS_UPLOAD_STARTED in tracker.names())
         awaitIdle()
+        vm = newViewModel()
         vm.onFilePicked(uri)
         await("the second upload") { api.keys.size == 2 }
         assertTrue(api.keys[0] != api.keys[1])
