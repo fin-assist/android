@@ -169,6 +169,28 @@ class PhoneViewModelTest {
         assertEquals("restored-key", flow.phoneRequestKey)
         assertTrue(vm.state.value.replayUnavailable)
         assertEquals("9161234567", vm.state.value.digits)
+        assertTrue(vm.state.value.retrying)
+        vm.submit()
+        assertNotEquals("restored-key", auth.keys.single())
+        assertEquals(PhoneEvent.GoToCall, vm.events.value)
+    }
+
+    @Test fun `the first primary retry after an offline key expires sends a new Start`() {
+        var elapsed = 0L
+        val vm = PhoneViewModel(auth, flow, tracker, clock, ElapsedClock { elapsed })
+        vm.setAgeConfirmed(true); vm.setConsentAccepted(true); vm.onInput(TextFieldValue("9161234567"))
+        auth.failure = AppError.Offline()
+        vm.submit()
+        assertTrue(vm.state.value.retrying)
+
+        elapsed = 24L * 60 * 60 * 1000
+        auth.failure = null
+        vm.submit()
+
+        assertEquals(2, auth.keys.size)
+        assertNotEquals(auth.keys.first(), auth.keys.last())
+        assertEquals(auth.requests.first(), auth.requests.last())
+        assertEquals(PhoneEvent.GoToCall, vm.events.value)
     }
 
     @Test fun `a new number drops the previous verification request`() {
@@ -240,7 +262,7 @@ class PhoneViewModelTest {
         reply.completeExceptionally(phoneRefusal(false))
         assertFalse(vm.state.value.busy)
         assertNull(vm.state.value.error)
-        assertNull(vm.state.value.requestRetryable)
+        assertFalse(vm.state.value.retrying)
         assertTrue(vm.state.value.retryReady)
         assertEquals(originalKey, flow.phoneRequestKey, "a stale response never changes the pending UUID")
         auth.pending = null
@@ -259,7 +281,7 @@ class PhoneViewModelTest {
         reply.completeExceptionally(phoneRefusal(false))
         assertEquals("9161234567", vm.state.value.digits)
         assertFalse(vm.state.value.retryReady)
-        assertEquals(false, vm.state.value.requestRetryable)
+        assertTrue(vm.state.value.retrying)
         vm.onInput(TextFieldValue("9161234567", TextRange(3)))
         auth.pending = null
         vm.submit()
@@ -326,11 +348,11 @@ class PhoneViewModelTest {
         assertTrue(vm.state.value.ageConfirmed)
         assertFalse(vm.state.value.pdConsentAccepted)
         assertTrue(vm.state.value.documentRefreshRequired)
-        vm.setConsentAccepted(true); vm.submit()
+        vm.setConsentAccepted(true)
         assertEquals(1, auth.requests.size)
-        auth.documentFailure = AppError.Offline(); vm.refreshDocument()
+        auth.documentFailure = AppError.Offline(); vm.submit()
         assertTrue(vm.state.value.documentRefreshRequired)
-        auth.documentFailure = null; auth.documentVersion = "pd-new"; vm.refreshDocument()
+        auth.documentFailure = null; auth.documentVersion = "pd-new"; vm.submit()
         assertFalse(vm.state.value.documentRefreshRequired)
         assertFalse(vm.state.value.pdConsentAccepted)
         auth.failure = null; vm.setConsentAccepted(true); vm.submit()
@@ -341,10 +363,10 @@ class PhoneViewModelTest {
     @Test fun `document load failure cannot send a number and is independently recoverable`() {
         auth.documentFailure = AppError.Offline()
         val vm = PhoneViewModel(auth, flow, tracker, clock, ElapsedClock { 0L })
-        vm.setAgeConfirmed(true); vm.onInput(TextFieldValue("9161234567")); vm.setConsentAccepted(true); vm.submit()
+        vm.setAgeConfirmed(true); vm.onInput(TextFieldValue("9161234567")); vm.setConsentAccepted(true)
         assertTrue(auth.requests.isEmpty()); assertNull(vm.state.value.document)
         assertTrue(vm.state.value.documentErrorPresentation?.connectionFailure == true)
-        auth.documentFailure = null; vm.refreshDocument(); vm.setConsentAccepted(true); vm.submit()
+        auth.documentFailure = null; vm.submit(); vm.setConsentAccepted(true); vm.submit()
         assertEquals(1, auth.requests.size)
     }
 
@@ -368,14 +390,11 @@ class PhoneViewModelTest {
         vm.submit(); vm.submit()
         assertEquals(1, auth.keys.size)
         assertTrue(vm.state.value.newIntentRequired); assertFalse(vm.state.value.retryReady)
-        vm.restart()
-        assertTrue(vm.state.value.restartAvailable, "captured refusal still permits explicit restart")
-        assertFalse(vm.state.value.ageConfirmed); assertFalse(vm.state.value.pdConsentAccepted)
-        vm.setAgeConfirmed(true)
-        assertTrue(vm.state.value.restartAvailable)
-        vm.setConsentAccepted(true); vm.submit()
-        assertTrue(vm.state.value.restartAvailable)
-        assertEquals(1, auth.keys.size, "restart must not bypass the original 429 wait")
+        assertTrue(vm.state.value.retrying)
+        assertFalse(vm.state.value.submitEnabled)
+        assertTrue(vm.state.value.ageConfirmed)
+        assertTrue(vm.state.value.pdConsentAccepted)
+        assertEquals(1, auth.keys.size)
         assertEquals("Слишком много попыток. Повторите в 13:43", vm.state.value.error)
         assertEquals(auth.failure!!.presentation, vm.state.value.errorPresentation)
         scheduler.advanceTimeBy(1000); scheduler.runCurrent()
@@ -384,25 +403,27 @@ class PhoneViewModelTest {
         assertNotEquals(auth.keys[0], auth.keys[1])
         assertEquals(auth.requests[0], auth.requests[1])
         assertEquals(PhoneEvent.GoToCall, vm.events.value)
-        assertNull(vm.state.value.requestRetryable, "a successful new intent clears the old refusal metadata")
+        assertFalse(vm.state.value.retrying, "a successful new intent clears the old retry state")
     }
 
-    @Test fun `explicit restart abandons the denied key resets both choices and does not POST`() {
+    @Test fun `primary retry sends a new Start with the retained form after a terminal refusal`() {
         auth.failure = AppError.Server(500, response = ru.finassist.pf.core.common.error.ErrorResponseInfo("INTERNAL_ERROR", 500, requestRetryable = false))
         val vm = submitted()
+        val input = vm.state.value.input
+        val request = auth.requests.single()
         val key = auth.keys.single()
-        assertTrue(vm.state.value.restartAvailable)
-        vm.submit(); assertEquals(1, auth.keys.size)
         val documentCalls = auth.documentCalls
-        vm.restart()
-        assertNull(flow.phoneRequestKey); assertNull(flow.phoneRequest)
-        assertFalse(vm.state.value.ageConfirmed); assertFalse(vm.state.value.pdConsentAccepted)
-        assertEquals(documentCalls + 1, auth.documentCalls)
-        assertEquals(1, auth.keys.size)
+
         auth.failure = null
-        vm.setAgeConfirmed(true); vm.setConsentAccepted(true); vm.submit()
+        vm.submit()
+
+        assertEquals(listOf(request, request), auth.requests)
         assertNotEquals(key, auth.keys.last())
-        assertEquals(2, auth.keys.size)
+        assertEquals(documentCalls, auth.documentCalls)
+        assertEquals(input, vm.state.value.input)
+        assertTrue(vm.state.value.ageConfirmed)
+        assertTrue(vm.state.value.pdConsentAccepted)
+        assertEquals(PhoneEvent.GoToCall, vm.events.value)
     }
 
     @Test fun `an immediate corrected document cannot be overwritten by stale Start refusal metadata`() {
@@ -413,7 +434,7 @@ class PhoneViewModelTest {
         auth.documentVersion = "new"
         vm.submit()
         assertEquals("new", vm.state.value.document?.version)
-        assertNull(vm.state.value.requestRetryable)
+        assertFalse(vm.state.value.retrying)
         assertTrue(vm.state.value.retryReady)
         assertFalse(vm.state.value.pdConsentAccepted)
     }
@@ -435,9 +456,9 @@ class PhoneViewModelTest {
         val waitText = vm.state.value.error
         val waitPresentation = vm.state.value.errorPresentation
         vm.onInput(TextFieldValue("9031234567")); vm.submit()
-        assertTrue(vm.state.value.restartAvailable)
+        assertTrue(vm.state.value.retrying)
         vm.onInput(TextFieldValue("9161234567")); vm.submit()
-        assertTrue(vm.state.value.restartAvailable)
+        assertTrue(vm.state.value.retrying)
         assertEquals(1, auth.keys.size)
         assertTrue(vm.state.value.newIntentRequired)
         assertFalse(vm.state.value.retryReady)
@@ -451,100 +472,118 @@ class PhoneViewModelTest {
         assertEquals(auth.requests.first(), auth.requests.last())
     }
 
-    @Test fun `a forbidden initial document GET can be abandoned by explicit restart before confirming and sending phone`() {
+    @Test fun `primary retry loads the refused document and retains the number and age`() {
         auth.documentFailure = AppError.Api("DOCUMENT_UNAVAILABLE", 403,
             response = ru.finassist.pf.core.common.error.ErrorResponseInfo("DOCUMENT_UNAVAILABLE", 403, requestRetryable = false))
         val vm = PhoneViewModel(auth, flow, tracker, clock, ElapsedClock { 0L })
+        vm.setAgeConfirmed(true)
+        vm.onInput(TextFieldValue("9161234567", TextRange(4)))
+        val input = vm.state.value.input
         assertNull(vm.state.value.document)
-        assertFalse(vm.state.value.documentRefreshReady)
-        assertTrue(vm.state.value.documentRefreshRequired)
-        assertTrue(vm.state.value.restartAvailable)
+        assertTrue(vm.state.value.retrying)
+        assertTrue(vm.state.value.submitEnabled)
         assertEquals(auth.documentFailure!!.presentation, vm.state.value.documentErrorPresentation)
-        vm.refreshDocument()
-        assertEquals(1, auth.documentCalls, "the refused original GET cannot be replayed")
+
         auth.documentFailure = null
-        vm.restart()
+        vm.submit()
+
         assertEquals(2, auth.documentCalls)
         assertEquals(auth.documentVersion, vm.state.value.document?.version)
-        assertFalse(vm.state.value.restartAvailable)
+        assertFalse(vm.state.value.retrying)
         assertNull(vm.state.value.documentErrorPresentation)
         assertNull(vm.state.value.documentRetryText)
-        assertFalse(vm.state.value.ageConfirmed)
+        assertEquals(input, vm.state.value.input)
+        assertTrue(vm.state.value.ageConfirmed)
         assertFalse(vm.state.value.pdConsentAccepted)
-        assertTrue(auth.requests.isEmpty(), "restart only loads the document")
-        vm.setAgeConfirmed(true); vm.setConsentAccepted(true); vm.onInput(TextFieldValue("9161234567")); vm.submit()
+        assertTrue(auth.requests.isEmpty(), "the document action only issues a GET")
+        vm.setConsentAccepted(true); vm.submit()
         assertEquals(1, auth.requests.size)
         assertEquals(PhoneEvent.GoToCall, vm.events.value)
     }
 
-    @Test fun `refused document GET wait survives explicit restart and only enables a new GET after its deadline`() {
-        val scheduler = kotlinx.coroutines.test.TestCoroutineScheduler()
-        Dispatchers.setMain(UnconfinedTestDispatcher(scheduler))
-        val presentation = ru.finassist.pf.core.common.error.ErrorPresentation(
-            ru.finassist.pf.core.common.error.UserMessage.from("Документ временно недоступен"),
-            ru.finassist.pf.core.common.error.ErrorSeverity.WARNING)
-        auth.documentFailure = AppError.RateLimited(deviceNow.plusMinutes(5), 1,
-            ru.finassist.pf.core.common.error.ErrorResponseInfo("RATE_LIMITED", 429, requestRetryable = false,
-                retryAfterSeconds = 1, timing = ResponseTiming(receivedElapsedMillis = 0), presentation = presentation))
-        val vm = PhoneViewModel(auth, flow, tracker, clock, ElapsedClock { scheduler.currentTime })
-        assertFalse(vm.state.value.restartAvailable)
-        vm.setAgeConfirmed(true); vm.setConsentAccepted(true); vm.restart(); vm.refreshDocument(); vm.submit()
-        assertEquals(1, auth.documentCalls); assertTrue(auth.requests.isEmpty())
-        assertEquals("Слишком много попыток. Повторите в 13:43", vm.state.value.documentError)
-        assertEquals(presentation, vm.state.value.documentErrorPresentation)
-        assertEquals("Повторите в 13:43", vm.state.value.documentRetryText)
-        scheduler.advanceTimeBy(999); scheduler.runCurrent()
-        assertFalse(vm.state.value.restartAvailable)
-        scheduler.advanceTimeBy(1); scheduler.runCurrent()
-        assertTrue(vm.state.value.restartAvailable)
-        assertEquals(1, auth.documentCalls, "deadline alone never automatically GETs")
-        vm.refreshDocument(); assertEquals(1, auth.documentCalls, "the original GET remains forbidden")
-        auth.documentFailure = null; vm.restart()
-        assertEquals(2, auth.documentCalls)
-        assertNull(vm.state.value.documentError)
-        assertNull(vm.state.value.documentErrorPresentation)
-        assertNull(vm.state.value.documentRetryText)
-        assertFalse(vm.state.value.ageConfirmed); assertFalse(vm.state.value.pdConsentAccepted)
-        assertTrue(auth.requests.isEmpty(), "explicit restart only GETs the document")
+    @Test fun `the primary button respects server waits for both refused and retryable document reads`() {
+        for (retryable in listOf(false, true)) {
+            val scheduler = kotlinx.coroutines.test.TestCoroutineScheduler()
+            Dispatchers.setMain(UnconfinedTestDispatcher(scheduler))
+            val api = FakeAuth()
+            val presentation = ru.finassist.pf.core.common.error.ErrorPresentation(
+                ru.finassist.pf.core.common.error.UserMessage.from("Документ временно недоступен"))
+            api.documentFailure = AppError.RateLimited(deviceNow.plusMinutes(5), 1,
+                ru.finassist.pf.core.common.error.ErrorResponseInfo("RATE_LIMITED", 429, requestRetryable = retryable,
+                    retryAfterSeconds = 1, timing = ResponseTiming(receivedElapsedMillis = 0), presentation = presentation))
+            val vm = PhoneViewModel(api, SignInFlow(), tracker, clock, ElapsedClock { scheduler.currentTime })
+            vm.setAgeConfirmed(true)
+            vm.onInput(TextFieldValue("9161234567"))
+            vm.submit()
+            assertEquals(1, api.documentCalls)
+            assertTrue(vm.state.value.retrying)
+            assertFalse(vm.state.value.submitEnabled)
+            assertEquals("Слишком много попыток. Повторите в 13:43", vm.state.value.documentError)
+            assertEquals(presentation, vm.state.value.documentErrorPresentation)
+            assertEquals("Повторите в 13:43", vm.state.value.documentRetryText)
+
+            scheduler.advanceTimeBy(999); scheduler.runCurrent()
+            assertFalse(vm.state.value.submitEnabled)
+            scheduler.advanceTimeBy(1); scheduler.runCurrent()
+            assertTrue(vm.state.value.submitEnabled)
+            assertEquals(1, api.documentCalls, "the deadline alone never starts a GET")
+
+            api.documentFailure = null
+            vm.submit()
+            assertEquals(2, api.documentCalls)
+            assertNull(vm.state.value.documentError)
+            assertNull(vm.state.value.documentErrorPresentation)
+            assertNull(vm.state.value.documentRetryText)
+            assertTrue(vm.state.value.ageConfirmed)
+            assertEquals("9161234567", vm.state.value.digits)
+            assertFalse(vm.state.value.pdConsentAccepted)
+            assertTrue(api.requests.isEmpty())
+        }
     }
 
-    @Test fun `document GET target without Date never invents a restart deadline`() {
+    @Test fun `document GET target without Date keeps the primary retry disabled`() {
         var elapsed = 0L
         auth.documentFailure = AppError.RateLimited(deviceNow.plusMinutes(5),
             response = ru.finassist.pf.core.common.error.ErrorResponseInfo("RATE_LIMITED", 429, requestRetryable = false,
                 retryAt = deviceNow.plusMinutes(5), timing = ResponseTiming(receivedElapsedMillis = 0)))
         val vm = PhoneViewModel(auth, flow, tracker, clock, ElapsedClock { elapsed })
-        assertFalse(vm.state.value.restartAvailable)
+        assertFalse(vm.state.value.submitEnabled)
         elapsed = 24L * 60 * 60 * 1000
-        vm.restart(); vm.setAgeConfirmed(true); vm.restart()
-        assertFalse(vm.state.value.restartAvailable)
+        vm.submit(); vm.setAgeConfirmed(true); vm.submit()
+        assertFalse(vm.state.value.submitEnabled)
         assertEquals(1, auth.documentCalls)
         assertTrue(auth.requests.isEmpty())
     }
 
-    @Test fun `permitted document GET retry preserves its explanation and only refreshes explicitly after wait`() {
+    @Test fun `terminal Start wait survives editing and retry sends only one fresh request`() {
         val scheduler = kotlinx.coroutines.test.TestCoroutineScheduler()
         Dispatchers.setMain(UnconfinedTestDispatcher(scheduler))
-        val presentation = ru.finassist.pf.core.common.error.ErrorPresentation(
-            ru.finassist.pf.core.common.error.UserMessage.from("Подождите перед загрузкой"))
-        auth.documentFailure = AppError.RateLimited(deviceNow.plusMinutes(5), 1,
-            ru.finassist.pf.core.common.error.ErrorResponseInfo("RATE_LIMITED", 429, requestRetryable = true,
-                retryAfterSeconds = 1, timing = ResponseTiming(receivedElapsedMillis = 0), presentation = presentation))
         val vm = PhoneViewModel(auth, flow, tracker, clock, ElapsedClock { scheduler.currentTime })
-        vm.restart(); vm.refreshDocument(); vm.setAgeConfirmed(true); vm.setConsentAccepted(true)
-        assertEquals(1, auth.documentCalls)
-        assertFalse(vm.state.value.documentRefreshReady)
-        assertEquals("Слишком много попыток. Повторите в 13:43", vm.state.value.documentError)
-        assertEquals(presentation, vm.state.value.documentErrorPresentation)
-        assertEquals("Повторите в 13:43", vm.state.value.documentRetryText)
+        vm.setAgeConfirmed(true); vm.setConsentAccepted(true); vm.onInput(TextFieldValue("9161234567"))
+        auth.failure = AppError.Server(500, response = ru.finassist.pf.core.common.error.ErrorResponseInfo(
+            "INTERNAL_ERROR", 500, requestRetryable = false, retryAfterSeconds = 1,
+            timing = ResponseTiming(receivedElapsedMillis = 0)))
+        vm.submit()
+        assertFalse(vm.state.value.submitEnabled)
+        vm.onInput(TextFieldValue("9031234567"))
+        vm.onInput(TextFieldValue("9161234567"))
+        vm.submit()
+        assertEquals(1, auth.keys.size)
+        assertTrue(vm.state.value.retrying)
         scheduler.advanceTimeBy(1000); scheduler.runCurrent()
-        assertTrue(vm.state.value.documentRefreshReady)
-        assertFalse(vm.state.value.restartAvailable)
-        assertEquals(1, auth.documentCalls)
-        auth.documentFailure = null; vm.refreshDocument()
-        assertEquals(2, auth.documentCalls)
-        assertNull(vm.state.value.documentError); assertNull(vm.state.value.documentErrorPresentation)
-        assertNull(vm.state.value.documentRetryText); assertTrue(auth.requests.isEmpty())
+        assertTrue(vm.state.value.submitEnabled)
+        assertEquals(1, auth.keys.size, "the deadline alone never sends a Start")
+
+        val pending = CompletableDeferred<PhoneVerification>()
+        auth.pending = pending
+        vm.submit()
+        assertFalse(vm.state.value.submitEnabled)
+        vm.submit()
+        assertEquals(2, auth.keys.size)
+        assertNotEquals(auth.keys.first(), auth.keys.last())
+        assertEquals(auth.requests.first(), auth.requests.last())
+        pending.complete(PhoneVerification("vt_new", "+78000000000", deviceNow.plusMinutes(5), expiresIn = 300))
+        assertEquals(PhoneEvent.GoToCall, vm.events.value)
     }
 
     @Test fun `document and Start retry times use clock zone instead of the server timestamp offset`() {

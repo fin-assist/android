@@ -24,16 +24,20 @@ tags:
       id: "auth.phone.submit"
 - assertVisible:
     id: "auth.phone.submit"
-    enabled: false
+    containsChild:
+      text: "Повторить"
+    enabled: true
 - runFlow:
     file: ../../subflows/config.yaml
     env:
       LINK: "pfe2e://config?offline=false"
 - scrollUntilVisible:
     element:
-      id: "auth.phone.document_refresh"
+      id: "auth.phone.submit"
 - tapOn:
-    id: "auth.phone.document_refresh"
+    id: "auth.phone.submit"
+    containsChild:
+      text: "Повторить"
 - runFlow: ../../subflows/confirm_phone.yaml
 - scrollUntilVisible:
     element:
@@ -82,6 +86,8 @@ tags:
       id: "auth.phone.submit"
 - tapOn:
     id: "auth.phone.submit"
+    containsChild:
+      text: "Повторить"
 - runFlow: ../../subflows/set_passcode.yaml
 - extendedWaitUntil:
     visible:
@@ -89,3 +95,7 @@ tags:
     timeout: 40000
 - assertNotVisible:
     id: "auth.consent"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?consent_type=personal_data&expect_consent_reads=2&expect_consent_starts=2026-09-28,2026-09-28&expect_consent_start_keys=1"
