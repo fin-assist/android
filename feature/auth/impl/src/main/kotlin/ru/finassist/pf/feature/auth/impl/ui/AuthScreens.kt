@@ -118,7 +118,6 @@ fun PhoneScreen(reason: String?, onNext: () -> Unit, vm: PhoneViewModel = hiltVi
     val context = LocalContext.current
     PhoneContent(state, onInput = vm::onInput, onSubmit = vm::submit,
         onAgeConfirmed = vm::setAgeConfirmed, onConsentAccepted = vm::setConsentAccepted,
-        onRefreshDocument = vm::refreshDocument, onRestart = vm::restart,
         onOpenDocument = { url -> runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) } })
 }
 
@@ -126,7 +125,7 @@ fun PhoneScreen(reason: String?, onNext: () -> Unit, vm: PhoneViewModel = hiltVi
 internal fun PhoneContent(
     state: PhoneUiState, onInput: (TextFieldValue) -> Unit, onSubmit: () -> Unit,
     onAgeConfirmed: (Boolean) -> Unit = {}, onConsentAccepted: (Boolean) -> Unit = {},
-    onRefreshDocument: () -> Unit = {}, onOpenDocument: (String) -> Unit = {}, onRestart: () -> Unit = {},
+    onOpenDocument: (String) -> Unit = {},
 ) {
     AuthScaffold(AuthTags.PHONE) {
         Column(Modifier.weight(1f).padding(vertical = PfTheme.dimens.space6), verticalArrangement = Arrangement.Center) {
@@ -164,21 +163,19 @@ internal fun PhoneContent(
                     ?: PfNotice(message, tone = NoticeTone.WARNING, alert = true)
                 state.documentRetryText?.let { Text(it, style = PfTheme.type.caption, color = PfTheme.colors.textMuted) }
             }
-            if (state.documentRefreshRequired || state.documentError != null) {
-                PfButton("Обновить документ", enabled = state.documentRefreshReady, onClick = onRefreshDocument,
-                    busy = state.documentBusy, busyText = "Загружаем…", modifier = Modifier.testTag(AuthTags.PHONE_DOCUMENT_REFRESH))
-            }
             state.errorPresentation?.let { presentation ->
                 ErrorMessage(presentation, state.error ?: "Не получилось отправить номер. Попробуйте ещё раз")
             }
             PfButton(
-                if (state.newIntentRequired) "Запросить заново" else "Продолжить",
-                enabled = state.ageConfirmed && state.pdConsentAccepted && state.document != null && state.retryReady && !state.replayUnavailable, onClick = onSubmit, variant = ButtonVariant.PRIMARY, block = true, busy = state.busy, busyText = "Отправляем…",
+                if (state.retrying) "Повторить" else "Продолжить",
+                enabled = state.submitEnabled,
+                onClick = onSubmit,
+                variant = ButtonVariant.PRIMARY,
+                block = true,
+                busy = state.busy || state.documentBusy,
+                busyText = if (state.documentBusy) "Загружаем…" else "Отправляем…",
                 modifier = Modifier.testTag(AuthTags.PHONE_SUBMIT),
             )
-            if (state.restartAvailable) PfButton("Начать вход заново", onClick = onRestart,
-                enabled = !state.busy && !state.documentBusy, block = true,
-                modifier = Modifier.testTag(AuthTags.PHONE_RESTART))
         }
     }
 }
@@ -474,8 +471,6 @@ internal object AuthTags {
     const val PHONE_AGE = "auth.phone.age"
     const val PHONE_CONSENT = "auth.phone.consent"
     const val PHONE_DOCUMENT = "auth.phone.document"
-    const val PHONE_RESTART = "auth.phone.restart"
-    const val PHONE_DOCUMENT_REFRESH = "auth.phone.document_refresh"
     const val PHONE_INPUT = "auth.phone.input"
     const val PHONE_SUBMIT = "auth.phone.submit"
     const val PHONE_NOTICE = "auth.phone.notice"

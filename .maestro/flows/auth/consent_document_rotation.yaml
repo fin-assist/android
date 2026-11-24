@@ -76,7 +76,9 @@ tags:
       id: "auth.phone.submit"
 - assertVisible:
     id: "auth.phone.submit"
-    enabled: false
+    containsChild:
+      text: "Повторить"
+    enabled: true
 - runFlow:
     file: ../../subflows/config.yaml
     env:
@@ -85,9 +87,9 @@ tags:
 # A successful GET of the rejected version does not allow the old Start again.
 - scrollUntilVisible:
     element:
-      id: "auth.phone.document_refresh"
+      id: "auth.phone.submit"
 - tapOn:
-    id: "auth.phone.document_refresh"
+    id: "auth.phone.submit"
 - extendedWaitUntil:
     visible: "Новая версия согласия пока недоступна. Обновите документ позже"
     timeout: 10000
@@ -104,7 +106,9 @@ tags:
       id: "auth.phone.submit"
 - assertVisible:
     id: "auth.phone.submit"
-    enabled: false
+    containsChild:
+      text: "Повторить"
+    enabled: true
 - runFlow:
     file: ../../subflows/config.yaml
     env:
@@ -113,18 +117,18 @@ tags:
 # Hold the actual next GET. Repeated taps cannot start a second simultaneous read.
 - scrollUntilVisible:
     element:
-      id: "auth.phone.document_refresh"
+      id: "auth.phone.submit"
 - tapOn:
-    id: "auth.phone.document_refresh"
+    id: "auth.phone.submit"
 - extendedWaitUntil:
     visible:
-      id: "auth.phone.document_refresh"
+      id: "auth.phone.submit"
       enabled: false
     timeout: 10000
 - tapOn:
-    id: "auth.phone.document_refresh"
+    id: "auth.phone.submit"
 - tapOn:
-    id: "auth.phone.document_refresh"
+    id: "auth.phone.submit"
 - runFlow:
     file: ../../subflows/config.yaml
     env:
@@ -135,7 +139,9 @@ tags:
       LINK: "pfe2e://config?consent_type=personal_data&consent_release=true"
 - extendedWaitUntil:
     visible:
-      id: "auth.phone.document_refresh"
+      id: "auth.phone.submit"
+      containsChild:
+        text: "Повторить"
       enabled: true
     timeout: 10000
 - assertVisible: "Новая версия согласия пока недоступна. Обновите документ позже"
@@ -148,24 +154,18 @@ tags:
       LINK: "pfe2e://config?consent_type=personal_data&consent_read=rate_limited&consent_retry_s=30&expect_consent_reads=4&expect_consent_starts=pd-1"
 - scrollUntilVisible:
     element:
-      id: "auth.phone.document_refresh"
+      id: "auth.phone.submit"
 - tapOn:
-    id: "auth.phone.document_refresh"
+    id: "auth.phone.submit"
 - extendedWaitUntil:
     visible: "Слишком много запросов\\. Попробуйте позже"
     timeout: 10000
 - assertVisible: "Повторите в [0-2][0-9]:[0-5][0-9]"
 - assertVisible:
-    id: "auth.phone.document_refresh"
-    enabled: false
-- scrollUntilVisible:
-    element:
-      id: "auth.phone.submit"
-- assertVisible:
     id: "auth.phone.submit"
+    containsChild:
+      text: "Повторить"
     enabled: false
-- assertNotVisible:
-    id: "auth.phone.restart"
 - pressKey: HOME
 - launchApp:
     stopApp: false
@@ -175,38 +175,35 @@ tags:
     timeout: 10000
 - scrollUntilVisible:
     element:
-      id: "auth.phone.document_refresh"
+      id: "auth.phone.submit"
 - assertVisible:
-    id: "auth.phone.document_refresh"
+    id: "auth.phone.submit"
+    containsChild:
+      text: "Повторить"
     enabled: false
-- assertNotVisible:
-    id: "auth.phone.restart"
 - runFlow:
     file: ../../subflows/config.yaml
     env:
       LINK: "pfe2e://config?consent_type=personal_data&consent_document=current&consent_read=ready&expect_consent_reads=5&expect_consent_starts=pd-1&expect_consent_registers="
-# Expiry offers an explicit restart; it neither reads nor sends automatically.
+# The deadline enables the same action without starting a GET or POST on its own.
 - scrollUntilVisible:
     element:
       id: "auth.phone.submit"
-- scrollUntilVisible:
-    element:
-      id: "auth.phone.restart"
+      containsChild:
+        text: "Повторить"
       enabled: true
-    direction: DOWN
     timeout: 60000
-- assertVisible:
-    id: "auth.phone.document_refresh"
-    enabled: false
 - runFlow:
     file: ../../subflows/config.yaml
     env:
       LINK: "pfe2e://config?consent_type=personal_data&expect_consent_reads=5&expect_consent_starts=pd-1&expect_consent_registers="
 - scrollUntilVisible:
     element:
-      id: "auth.phone.restart"
+      id: "auth.phone.submit"
 - tapOn:
-    id: "auth.phone.restart"
+    id: "auth.phone.submit"
+    containsChild:
+      text: "Повторить"
 - extendedWaitUntil:
     visible:
       id: "auth.phone.document"
@@ -216,16 +213,22 @@ tags:
       id: "auth.phone.age"
 - assertVisible:
     id: "auth.phone.age"
-    checked: false
+    checked: true
 - assertVisible:
     id: "auth.phone.input"
-    enabled: false
+    text: '.*(916 000-00-54|9160000054).*'
+    enabled: true
 - scrollUntilVisible:
     element:
       id: "auth.phone.consent"
 - assertVisible:
     id: "auth.phone.consent"
     checked: false
+- assertVisible:
+    id: "auth.phone.submit"
+    containsChild:
+      text: "Продолжить"
+    enabled: false
 - runFlow:
     file: ../../subflows/config.yaml
     env:
@@ -254,7 +257,7 @@ tags:
 - assertNotVisible:
     id: "auth.consent.checkbox"
 - assertNotVisible:
-    id: "auth.phone.document_refresh"
+    id: "auth.phone.submit"
 - scrollUntilVisible:
     element:
       id: "auth.consent.submit"

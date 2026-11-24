@@ -64,8 +64,8 @@ class SignInFlow @Inject constructor() {
         trackedPhoneKey?.takeIf { it.value == value } ?: IdempotencyKey(value)
     }
 
-    fun reset(keepPhoneStartWait: Boolean = false) {
-        if (!keepPhoneStartWait || startGate?.newIntentRequired != true) startGate?.clear()
+    fun reset() {
+        startGate?.clear()
         clearVerification()
         registrationToken = null
         phoneRequestKey = null

@@ -754,7 +754,7 @@ class CallViewModelTest {
         }
     }
 
-    @Test fun `Call Start 429 survives back and explicit restart on Phone for the same number`() {
+    @Test fun `Call Start 429 survives back and blocks the primary retry until its original deadline`() {
         val h = harness()
         val keys = mutableListOf<String>()
         h.auth.startPhone = { key, _ ->
@@ -771,9 +771,9 @@ class CallViewModelTest {
         assertFalse(phone.state.value.retryReady)
         assertEquals("Слишком много попыток. Повторите в 14:27", phone.state.value.error)
         assertEquals(1, keys.size, "back to the same number cannot POST before retry_at")
-        phone.restart(); phone.setAgeConfirmed(true); phone.setConsentAccepted(true); phone.submit()
+        phone.submit()
         assertEquals("Слишком много попыток. Повторите в 14:27", phone.state.value.error)
-        assertEquals(1, keys.size, "explicit restart also preserves the server wait")
+        assertEquals(1, keys.size, "another primary click cannot bypass the server wait")
         advanceSeconds(1); phone.submit()
         assertEquals(2, keys.size)
         assertNotEquals(keys.first(), keys.last(), "received 429 requires a NEW intent after the wait")
@@ -792,18 +792,53 @@ class CallViewModelTest {
         assertEquals(keys.first(), keys.last(), "lost transport keeps the pending request key across back")
     }
 
-    @Test fun `Call terminal Start refusal exposes explicit restart after back to Phone`() {
+    @Test fun `Call lost response with an expired key starts a new request on the first Phone retry`() {
         val h = harness()
-        h.auth.startPhone = { _, _ -> throw AppError.Server(500,
-            response = ErrorResponseInfo("INTERNAL_ERROR", 500, requestRetryable = false)) }
+        h.flow.verificationReceived(verification(expiresIn = 0), now.toInstant())
+        val keys = mutableListOf<String>()
+        val phones = mutableListOf<String>()
+        val originalRequest = h.flow.phoneRequest
+        h.auth.startPhone = { key, phone ->
+            keys += key.value
+            phones += phone
+            if (keys.size == 1) throw AppError.Offline()
+            verification(token = "vt_new")
+        }
+        h.vm(event(VerificationStatus.EXPIRED)).apply { watch(); requestAgain() }
+        elapsedOffset = 24L * 60 * 60 * 1000
+
+        val phone = h.phoneVm()
+        phone.onResume()
+        assertTrue(phone.state.value.retrying)
+        assertTrue(phone.state.value.submitEnabled)
+        phone.submit()
+
+        assertEquals(2, keys.size)
+        assertNotEquals(keys.first(), keys.last())
+        assertEquals(listOf(h.flow.phone, h.flow.phone), phones)
+        assertEquals(originalRequest, h.flow.phoneRequest)
+        assertEquals(PhoneEvent.GoToCall, phone.events.value)
+    }
+
+    @Test fun `Call terminal Start refusal can be retried with a new key after back to Phone`() {
+        val h = harness()
+        val keys = mutableListOf<String>()
+        h.auth.startPhone = { key, _ ->
+            keys += key.value
+            if (keys.size == 1) throw AppError.Server(500,
+                response = ErrorResponseInfo("INTERNAL_ERROR", 500, requestRetryable = false))
+            verification(token = "vt_new")
+        }
         h.vm(event(VerificationStatus.EXPIRED)).apply { watch(); requestAgain() }
         val phone = h.phoneVm()
-        assertFalse(phone.state.value.retryReady)
-        assertTrue(phone.state.value.restartAvailable)
-        phone.restart()
-        assertTrue(phone.state.value.retryReady)
-        assertFalse(phone.state.value.ageConfirmed)
-        assertFalse(phone.state.value.pdConsentAccepted)
+        assertTrue(phone.state.value.retrying)
+        assertTrue(phone.state.value.submitEnabled)
+        phone.submit()
+        assertEquals(2, keys.size)
+        assertNotEquals(keys.first(), keys.last())
+        assertTrue(phone.state.value.ageConfirmed)
+        assertTrue(phone.state.value.pdConsentAccepted)
+        assertEquals(PhoneEvent.GoToCall, phone.events.value)
     }
 
 }
