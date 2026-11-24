@@ -117,7 +117,7 @@ internal fun PhoneContent(
             PfMark(size = PfTheme.dimens.mark)
             Spacer(Modifier.height(PfTheme.dimens.space4))
             Text("Понятные финансы", style = PfTheme.type.title1, color = PfTheme.colors.text)
-            Text("Разберите операции по выписке и узнайте о своих финансах", style = PfTheme.type.lead, color = PfTheme.colors.textMuted, modifier = Modifier.padding(top = PfTheme.dimens.space1))
+            Text("Узнайте о своих финансах", style = PfTheme.type.lead, color = PfTheme.colors.textMuted, modifier = Modifier.padding(top = PfTheme.dimens.space1))
         }
         Column(verticalArrangement = Arrangement.spacedBy(PfTheme.dimens.space4)) {
             state.notice?.let { PfNotice(it, tone = NoticeTone.INFO, alert = true, modifier = Modifier.testTag(AuthTags.PHONE_NOTICE)) }

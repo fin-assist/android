@@ -2584,7 +2584,7 @@
           ],
           "expectations": [
             {
-              "requirement": "Title именноБезописания; нет Описание в выписке.",
+              "requirement": "Заголовок «Без описания», строка «Описание» отсутствует.",
               "evidence": [
                 {
                   "path": ".maestro/flows/statements/upload_no_description.yaml",
@@ -2599,7 +2599,7 @@
                 {
                   "path": ".maestro/flows/statements/upload_no_description.yaml",
                   "line": 73,
-                  "detail": "- assertNotVisible: \"Описание в выписке\""
+                  "detail": "- assertNotVisible: \"^Описание$\""
                 }
               ],
               "status": "fixed",
