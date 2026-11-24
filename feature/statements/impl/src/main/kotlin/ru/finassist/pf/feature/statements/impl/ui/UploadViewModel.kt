@@ -22,6 +22,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import ru.finassist.pf.core.common.time.Clock
@@ -232,12 +233,17 @@ class UploadViewModel @Inject constructor(
         launchUpload(uri)
     }
 
-    /** Take the selection only after the initial limits are loaded and the caller still permits import. */
+    /** Wait for a verified guide without replacing the current upload, its result or its retry. */
     suspend fun onExternalFilePicked(takeSelection: () -> Uri?) {
-        configJob?.join()
+        while (true) {
+            state.first { it.phase == UploadPhase.Disabled || canTakeExternalFile(it) }
+            // The previous pick may still be inspecting its URI before it enters Busy.
+            uploadJob?.join()
+            val current = state.value
+            if (current.phase == UploadPhase.Disabled) return
+            if (canTakeExternalFile(current) && !uploadInFlight) break
+        }
         val uri = takeSelection() ?: return
-        val phase = _state.value.phase
-        if (uploadInFlight || phase is UploadPhase.Busy || phase == UploadPhase.Disabled) return
         val readPermission = context.checkUriPermission(
             uri, Process.myPid(), Process.myUid(), Intent.FLAG_GRANT_READ_URI_PERMISSION,
         )
@@ -247,6 +253,10 @@ class UploadViewModel @Inject constructor(
         }
         launchUpload(uri)
     }
+
+    private fun canTakeExternalFile(state: UploadUiState) =
+        state.phase is UploadPhase.Guide && config != null && state.guideErrorPresentation == null &&
+            !state.uploadOffline && !state.sourceZoneUnsupported && state.doneUploadId == null
 
     /** Explicit new intent after the unknown-outcome warning; ordinary retry never replaces the old UUID. */
     fun startNewUpload() {

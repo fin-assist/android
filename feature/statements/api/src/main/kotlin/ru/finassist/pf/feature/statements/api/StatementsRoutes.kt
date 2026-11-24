@@ -7,10 +7,9 @@ object StatementsRoutes {
     /**
      * Upload guide + file picker + progress. [firstRun] — step 4 of 4 right after registration (no back,
      * «Загружу позже» link); otherwise opened from the feed, analytics or the history.
-     * [externalRequestId] identifies a pending external file selection held by the app in memory.
      */
     @Serializable
-    data class Upload(val firstRun: Boolean = false, val externalRequestId: String? = null)
+    data class Upload(val firstRun: Boolean = false)
 
     /** Import result of a finished upload; the result itself is kept by [StatementsRepository]. */
     @Serializable

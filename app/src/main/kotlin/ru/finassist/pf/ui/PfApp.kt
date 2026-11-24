@@ -29,7 +29,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavHostController
-import androidx.navigation.toRoute
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
@@ -55,6 +54,7 @@ import ru.finassist.pf.feature.auth.api.SessionState
 import ru.finassist.pf.feature.operations.api.OperationsRoutes
 import ru.finassist.pf.feature.profile.api.ProfileRoutes
 import ru.finassist.pf.feature.statements.api.StatementsRoutes
+import ru.finassist.pf.feature.statements.impl.ui.ExternalStatementSelection
 import ru.finassist.pf.feature.statements.impl.ui.LocalExternalStatementSelection
 
 /**
@@ -243,13 +243,16 @@ private fun MainLayer(
     val navigator = remember(controller) { NavControllerNavigator(controller) }
     // Keep the registration step while an external selection waits for the app to unlock.
     var firstRunUpload by rememberSaveable(userId) { mutableStateOf<Boolean?>(null) }
+    var openedStatementId by rememberSaveable(userId) { mutableStateOf<String?>(null) }
     LaunchedEffect(userId) {
         if (firstRunUpload == null) firstRunUpload = session.consumeJustRegistered()
     }
     val backStack by controller.currentBackStackEntryAsState()
     val destination = backStack?.destination
-    val canOpenStatement = consumeIncomingStatement != null
-    LaunchedEffect(firstRunUpload, incomingStatementId, canOpenStatement, destination != null) {
+    val externalStatement = if (incomingStatementId != null && consumeIncomingStatement != null) {
+        ExternalStatementSelection(incomingStatementId) { consumeIncomingStatement(incomingStatementId) }
+    } else null
+    LaunchedEffect(firstRunUpload, incomingStatementId, externalStatement != null, backStack?.id) {
         val firstRun = firstRunUpload ?: return@LaunchedEffect
         if (destination == null) return@LaunchedEffect
         if (!flags.isEnabled(Flag.STATEMENTS_UPLOAD)) {
@@ -263,17 +266,18 @@ private fun MainLayer(
             }
             return@LaunchedEffect
         }
-        if (!canOpenStatement) return@LaunchedEffect
-        val current = backStack?.takeIf { it.destination.hasRoute<StatementsRoutes.Upload>() }
-            ?.toRoute<StatementsRoutes.Upload>()
-        if (current?.externalRequestId != incomingStatementId) {
-            controller.navigate(
-                StatementsRoutes.Upload(
-                    firstRun = firstRun || current?.firstRun == true,
-                    externalRequestId = incomingStatementId,
-                ),
-            ) { launchSingleTop = true }
+        if (externalStatement == null) return@LaunchedEffect
+        // Keep the current upload, recovery, or result visible. The upload screen watches the latest selection.
+        if (destination.hasRoute<StatementsRoutes.Upload>() || destination.hasRoute<StatementsRoutes.Result>()) {
+            return@LaunchedEffect
         }
+        // Leaving a guide opened for this selection dismisses it without reading the file.
+        if (openedStatementId == incomingStatementId) {
+            externalStatement.take()
+            return@LaunchedEffect
+        }
+        openedStatementId = incomingStatementId
+        controller.navigate(StatementsRoutes.Upload(firstRun = firstRun)) { launchSingleTop = true }
         firstRunUpload = false
     }
     val assistantPolicy: AssistantAvailabilityPolicy = viewModel {
@@ -296,7 +300,7 @@ private fun MainLayer(
     Column(modifier.fillMaxSize()) {
         CompositionLocalProvider(
             LocalAssistantAvailability provides assistantPolicy,
-            LocalExternalStatementSelection provides consumeIncomingStatement,
+            LocalExternalStatementSelection provides externalStatement,
         ) {
             NavHost(controller, startDestination = OperationsRoutes.Feed, modifier = Modifier.weight(1f)) {
                 entries.forEach { entry -> with(entry) { install(navigator) } }

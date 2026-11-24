@@ -13,6 +13,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -174,13 +175,9 @@ class UploadViewModelTest {
     @Test fun `external selection waits for and applies the initial size limit`() {
         val configReady = CompletableDeferred<Unit>()
         val small = config.copy(maxFileSizeBytes = 4)
-        val granted = object : ContextWrapper(context) {
-            override fun checkUriPermission(uri: Uri, pid: Int, uid: Int, modeFlags: Int) =
-                PackageManager.PERMISSION_GRANTED
-        }
         api.configResponseGate = configReady
         api.currentConfig = small
-        vm = newViewModel(fileContext = granted)
+        vm = newViewModel(fileContext = contextWithExternalReadGrant())
         var selected = false
 
         runBlocking {
@@ -193,7 +190,7 @@ class UploadViewModelTest {
             assertFalse(selected)
             assertIs<UploadPhase.Loading>(vm.state.value.phase)
             configReady.complete(Unit)
-            external.join()
+            withTimeout(10_000) { external.join() }
         }
 
         assertTrue(selected)
@@ -201,6 +198,105 @@ class UploadViewModelTest {
         assertEquals(small, vm.state.value.config)
         assertEquals(UploadPhase.Error(ErrorCodes.FILE_TOO_LARGE, name, small), vm.state.value.phase)
         assertTrue(api.keys.isEmpty())
+    }
+
+    @Test fun `external selection does not read or post after config failure and waits for an allowed retry`() {
+        api.configFailure = AppError.RateLimited(retryAt = null, retryAfterSeconds = 2)
+        val initial = api.configCalls
+        val reads = AtomicInteger()
+        shadowOf(context.contentResolver).registerInputStreamSupplier(uri) {
+            reads.incrementAndGet()
+            ByteArrayInputStream("OFXHEADER:100".toByteArray())
+        }
+        vm = newViewModel(fileContext = contextWithExternalReadGrant())
+        var taken = false
+
+        runBlocking {
+            val external = launch(Dispatchers.Main, start = CoroutineStart.UNDISPATCHED) {
+                vm.onExternalFilePicked {
+                    taken = true
+                    uri
+                }
+            }
+            assertIs<UploadPhase.ConfigFailure>(vm.state.value.phase)
+            assertFalse(taken)
+            assertEquals(0, reads.get())
+            assertTrue(api.keys.isEmpty())
+
+            api.configFailure = null
+            vm.load()
+            assertEquals(initial + 1, api.configCalls)
+            dispatcher.scheduler.advanceTimeBy(2_001)
+            dispatcher.scheduler.runCurrent()
+            assertEquals(initial + 1, api.configCalls)
+            assertFalse(taken)
+            assertEquals(0, reads.get())
+            assertTrue(api.keys.isEmpty())
+
+            vm.load()
+            withTimeout(10_000) { external.join() }
+        }
+
+        awaitAccepted()
+        assertEquals(initial + 2, api.configCalls)
+        assertTrue(taken)
+        assertEquals(1, reads.get())
+        assertEquals(1, api.keys.size)
+    }
+
+    @Test fun `external selection waits through Busy and preserves the first upload recovery`() {
+        val request = CompletableDeferred<Unit>()
+        api.uploadGate = request
+        api.uploadFailures += AppError.Server(500)
+        vm = newViewModel(fileContext = contextWithExternalReadGrant())
+        vm.onFilePicked(uri)
+        await("the first POST") { api.keys.size == 1 }
+        val original = api.keys.single()
+        val second = Uri.parse("content://test/second.ofx")
+        shadowOf(context.contentResolver).registerInputStreamSupplier(second) {
+            ByteArrayInputStream("OFXHEADER:200".toByteArray())
+        }
+        var taken = false
+
+        runBlocking {
+            val external = launch(Dispatchers.Main, start = CoroutineStart.UNDISPATCHED) {
+                vm.onExternalFilePicked {
+                    taken = true
+                    second
+                }
+            }
+            assertIs<UploadPhase.Busy>(vm.state.value.phase)
+            assertFalse(taken)
+            request.complete(Unit)
+            await("the first failure") { it.phase is UploadPhase.Error }
+            awaitIdle()
+            assertFalse(taken)
+
+            dispatcher.scheduler.advanceTimeBy(24L * 60 * 60 * 1_000)
+            vm.retryUpload()
+            await("the unknown outcome") { it.phase is UploadPhase.RecoveryRequired }
+            awaitIdle()
+            assertFalse(taken)
+            assertEquals(listOf(original), api.keys)
+            assertEquals(original, IdempotencyKeys(store).pendingKey("statements.upload:${uploadBodyHash()}")?.value)
+
+            vm.startNewUpload()
+            awaitAccepted()
+            awaitIdle()
+            assertFalse(taken)
+            vm.cancelImport()
+            withTimeout(10_000) { external.join() }
+        }
+
+        await("the queued second upload") { api.keys.size == 3 }
+        assertTrue(taken)
+        assertEquals(listOf(name, name, "second.ofx"), api.names)
+        assertEquals(3, api.keys.toSet().size)
+    }
+
+    private fun contextWithExternalReadGrant() = object : ContextWrapper(context) {
+        override fun checkUriPermission(uri: Uri, pid: Int, uid: Int, modeFlags: Int) =
+            PackageManager.PERMISSION_GRANTED
     }
 
     @Test fun `selected dates request exact inclusive days and open unchanged server URL only after validation`() {

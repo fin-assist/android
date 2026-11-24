@@ -19,6 +19,10 @@ class StatementOpenIntentTest {
         assertEquals(file, incomingStatementUri(openOfx()))
     }
 
+    @Test fun `ignores Android's replay of the base intent when resuming a task from Recents`() {
+        assertNull(incomingStatementUri(openOfx().addFlags(Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY)))
+    }
+
     @Test fun `ignores opaque downloads with a generic type and unrelated actions`() {
         assertNull(incomingStatementUri(openOfx().setDataAndType(file, "application/octet-stream")))
         assertNull(incomingStatementUri(openOfx().setAction(Intent.ACTION_SEND)))

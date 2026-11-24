@@ -33,13 +33,12 @@ class StatementsEntry @Inject constructor() : FeatureEntry {
         composable<StatementsRoutes.Upload> { entry ->
             val route = entry.toRoute<StatementsRoutes.Upload>()
             val upload: UploadViewModel = hiltViewModel(entry)
-            val consume = LocalExternalStatementSelection.current
+            val selection = LocalExternalStatementSelection.current
             val lifecycle by entry.lifecycle.currentStateFlow.collectAsStateWithLifecycle()
-            LaunchedEffect(route.externalRequestId, lifecycle, consume != null) {
-                val requestId = route.externalRequestId
-                if (requestId != null && consume != null && lifecycle == Lifecycle.State.RESUMED) {
+            LaunchedEffect(selection?.id, lifecycle) {
+                if (selection != null && lifecycle == Lifecycle.State.RESUMED) {
                     upload.onExternalFilePicked {
-                        if (entry.lifecycle.currentState == Lifecycle.State.RESUMED) consume(requestId) else null
+                        if (entry.lifecycle.currentState == Lifecycle.State.RESUMED) selection.take() else null
                     }
                 }
             }

@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import ru.finassist.pf.feature.auth.api.SessionState
+import java.util.UUID
 
 /** Keeps the temporary URI in the activity's memory through sign-in and unlocking. */
 internal class IncomingStatement : ViewModel() {
@@ -13,13 +14,11 @@ internal class IncomingStatement : ViewModel() {
 
     private var selection by mutableStateOf<Selection?>(null)
     private var owner: SessionState.SignedIn? = null
-    private var nextId = 0L
-
     val id: String? get() = selection?.id
 
     fun offer(uri: Uri) {
         if (selection?.uri == uri) return
-        selection = Selection((++nextId).toString(), uri, owner)
+        selection = Selection(UUID.randomUUID().toString(), uri, owner)
     }
 
     fun observeSession(state: SessionState) {
