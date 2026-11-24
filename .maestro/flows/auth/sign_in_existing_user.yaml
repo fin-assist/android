@@ -41,14 +41,10 @@ tags:
     id: "auth.call.dial"
 - assertNotVisible:
     id: "auth.call.dial"
-- back
-# Google Phone may close its keypad before returning to the sign-in screen.
-- runFlow:
-    when:
-      notVisible:
-        id: "auth.call"
-    commands:
-      - back
+# Bring the same sign-in activity to the foreground regardless of the dialer's back stack.
+- pressKey: HOME
+- launchApp:
+    stopApp: false
 - extendedWaitUntil:
     visible:
       id: "auth.call.confirming"
