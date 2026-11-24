@@ -922,6 +922,27 @@ offline Retry and recovery through resume followed by explicit Send instead. The
 pending text, exactly two Ask attempts and reuse of the original idempotency key. The foreground online-Retry
 path still needs UI coverage with controllable connectivity that does not pause Chat.
 
+FIN-550: the owner confirmed that Android Recents can show the last main-window thumbnail after app lock.
+`scripts/check-release-screenshot.py` checks a locally signed `mockRelease` on an owned Android
+emulator. Sign in with the existing mock account and open «Операции» with the bundled fixture operation
+«Barsik 29» visible. The Python CI runs five host checks for the prerequisites, screenshot count and deadline.
+It also checks the crop coordinates and contrast threshold with a test double. The integration test that
+decodes real PNGs runs locally with Pillow before release acceptance. With `adb` on PATH and Pillow installed,
+run both commands:
+
+```bash
+python3 -c 'import PIL' &&
+    python3 -m unittest discover -v -s scripts -p 'test_check_release_screenshot.py' &&
+    python3 scripts/check-release-screenshot.py --serial emulator-5554 --avd Test_API36 build/release-operations.png
+```
+
+The host check has a 60 s deadline and requires a new System UI screenshot with visible content over the fixture
+operation.
+
+Not covered yet (FIN-550): regular Android UI CI runs the debuggable `mockE2e` build, where screenshots were
+already allowed before FIN-550. The local `mockRelease` command above verifies the release window. The Qase
+release acceptance case is pending authenticated access.
+
 Dictation UI behavior is authored in native `VoiceDictationTest` /
 [PLAINFIN-69](https://app.qase.io/case/PLAINFIN-69) (FIN-449), using deterministic platform callbacks while retaining
 the actual screen, input/session and chat VM. Focused native execution is tracked in [PR #277](https://github.com/fin-assist/android/pull/277) and Qase; each attempt is retained. Maestro cannot inject those

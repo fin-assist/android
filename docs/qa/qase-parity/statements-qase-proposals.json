@@ -99,6 +99,18 @@
       "evidence": [
         "docs/qa/qase-parity/statements.json"
       ]
+    },
+    {
+      "case_id": 23,
+      "field": "steps[2].expected_result",
+      "before": "Экран операции с заголовком «Без описания»; строки «Описание в выписке» нет, категория банка «Фастфуд» есть",
+      "proposed": "Экран операции с заголовком «Без описания»; строки «Описание» нет, категория банка «Фастфуд» есть",
+      "status": "pending_root_validation",
+      "reason": "FIN-556 переименовал строку в «Описание». Нужно сверить и обновить ожидаемый результат шага 3 в PLAINFIN-23.",
+      "evidence": [
+        "https://finassist.youtrack.cloud/issue/FIN-556",
+        ".maestro/flows/statements/upload_no_description.yaml"
+      ]
     }
   ]
 }

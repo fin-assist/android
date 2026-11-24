@@ -114,7 +114,7 @@ class OperationFormatTest {
         assertEquals(
             listOf(
                 StatementRow("Счёт", "Текущий ··4821", spoken = "текущий счёт, последние цифры 4821"),
-                StatementRow("Категория банка", "Супермаркеты", sublabel = "как в выписке"),
+                StatementRow("Категория банка", "Супермаркеты"),
             ),
             rows,
         )
@@ -138,7 +138,7 @@ class OperationFormatTest {
         assertEquals(
             listOf(
                 StatementRow("Счёт", "Текущий"),
-                StatementRow("Описание в выписке", "PYATEROCHKA 123"),
+                StatementRow("Описание", "PYATEROCHKA 123"),
                 StatementRow("Проведена банком", "26 сентября, 12:00"),
                 StatementRow("MCC", "5411"),
             ),

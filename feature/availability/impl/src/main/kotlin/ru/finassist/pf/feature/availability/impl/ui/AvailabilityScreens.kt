@@ -95,7 +95,7 @@ internal fun UpdateContent(onUpdate: () -> Unit, onSupport: () -> Unit, presenta
     subtitle = "Эта версия больше не поддерживается",
     subtitleTag = null,
     head = "Что сделать",
-    body = "Установите новую версию. Выписки, операции и настройки сохранятся — входить заново не придётся.",
+    body = "Установите новую версию. Операции и настройки сохранятся.",
     action = { PfButton("Обновить", onClick = onUpdate, variant = ButtonVariant.PRIMARY, block = true, modifier = Modifier.testTag(AvailabilityTags.UPDATE_BUTTON)) },
     support = { PfLink("Написать в поддержку", onClick = onSupport, modifier = Modifier.testTag(AvailabilityTags.UPDATE_SUPPORT)) },
 )
@@ -150,33 +150,47 @@ private fun GateScreen(
 ) {
     val d = PfTheme.dimens
     val c = PfTheme.colors
-    BoxWithConstraints(Modifier.fillMaxSize().background(c.bg).windowInsetsPadding(PfInsets.statusBars).windowInsetsPadding(PfInsets.navigationBars)) {
+    BoxWithConstraints(
+        Modifier
+            .fillMaxSize()
+            .background(c.nav)
+            .windowInsetsPadding(PfInsets.statusBars)
+            .background(c.bg)
+            .windowInsetsPadding(PfInsets.navigationBars),
+    ) {
         val viewport = maxHeight
+        val screenMargin = Modifier.padding(horizontal = d.space5)
         Column(
             Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .heightIn(min = viewport)
-                .padding(start = d.space5, end = d.space5, top = d.space6, bottom = d.space4)
+                .padding(bottom = d.space4)
                 .testTag(tag),
         ) {
-            PfStatusHero(tone = tone, icon = icon, centered = false)
-            Spacer(Modifier.height(d.space5))
-            Text(title, style = PfTheme.type.title1, color = c.text, modifier = Modifier.semantics { heading() })
-            Text(
-                subtitle, style = PfTheme.type.lead, color = c.textMuted,
-                modifier = Modifier.padding(top = d.space1).then(if (subtitleTag != null) Modifier.testTag(subtitleTag) else Modifier),
-            )
+            Column(Modifier.fillMaxWidth().background(c.nav).then(screenMargin).padding(top = d.space6)) {
+                PfStatusHero(tone = tone, icon = icon, centered = false)
+                Spacer(Modifier.height(d.space5))
+                Text(title, style = PfTheme.type.title1, color = c.text, modifier = Modifier.semantics { heading() })
+                Text(
+                    subtitle, style = PfTheme.type.lead, color = c.textMuted,
+                    modifier = Modifier.padding(top = d.space1).then(if (subtitleTag != null) Modifier.testTag(subtitleTag) else Modifier),
+                )
+            }
             if (presentation.userMessage != UserMessage.Absent) {
                 Spacer(Modifier.height(d.space3))
-                ErrorMessage(presentation, subtitle)
+                ErrorMessage(presentation, subtitle, modifier = screenMargin)
             }
             Spacer(Modifier.height(d.space6))
-            Text(head, style = PfTheme.type.bodyStrong, color = c.text, modifier = Modifier.semantics { heading() })
-            Text(body, style = PfTheme.type.body, color = c.text, modifier = Modifier.padding(top = d.space1))
+            Column(screenMargin) {
+                Text(head, style = PfTheme.type.bodyStrong, color = c.text, modifier = Modifier.semantics { heading() })
+                Text(body, style = PfTheme.type.body, color = c.text, modifier = Modifier.padding(top = d.space1))
+            }
             Spacer(Modifier.weight(1f).heightIn(min = d.space6))
-            action()
-            Column(Modifier.fillMaxWidth().padding(top = d.space2), horizontalAlignment = Alignment.CenterHorizontally) { support() }
+            Column(screenMargin) {
+                action()
+                Column(Modifier.fillMaxWidth().padding(top = d.space2), horizontalAlignment = Alignment.CenterHorizontally) { support() }
+            }
         }
     }
 }

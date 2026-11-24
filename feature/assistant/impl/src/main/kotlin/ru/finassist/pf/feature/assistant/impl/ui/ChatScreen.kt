@@ -345,7 +345,7 @@ private fun Answer(
                 retryModifier = Modifier.testTag(AssistantTags.ANSWER_FAILED_RETRY),
             )
         }
-        item.blocks.isEmpty() && item.status == AnswerStatus.GENERATING -> PfChatStatus("Считаю по выписке…", Modifier.testTag(AssistantTags.ANSWER_GENERATING))
+        item.blocks.isEmpty() && item.status == AnswerStatus.GENERATING -> PfChatStatus("Считаю", Modifier.testTag(AssistantTags.ANSWER_GENERATING))
         else -> Column(verticalArrangement = Arrangement.spacedBy(PfTheme.dimens.space4)) {
             PfAssistantMessage(
                 // A finished answer gets its own tag, so tests can wait for the end of the stream.

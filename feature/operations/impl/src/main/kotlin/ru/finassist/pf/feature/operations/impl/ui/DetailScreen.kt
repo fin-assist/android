@@ -123,13 +123,13 @@ internal fun DetailContent(
                         )
                     }
                     Column {
-                        PfSectionTitle("Из выписки")
+                        PfSectionTitle("Об операции")
                         Spacer(Modifier.height(d.space2))
                         PfCard {
                             val rows = OperationFormat.statementRows(op) { dateTime(it, zone, today) }
                             rows.forEachIndexed { i, row ->
                                 PfDataRow(
-                                    row.label, row.value, sublabel = row.sublabel, divider = i < rows.lastIndex,
+                                    row.label, row.value, divider = i < rows.lastIndex,
                                     modifier = (row.spoken?.let { spoken -> Modifier.semantics { contentDescription = "${row.label}: $spoken" } } ?: Modifier)
                                         .then(if (row.label == "Категория банка") Modifier.testTag("operations.detail.statement.category") else Modifier),
                                 )

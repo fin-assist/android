@@ -40,7 +40,7 @@ class DetailDesignCheckTest {
 
     /**
      * No artboard in Figma yet (FIN-67): an operation whose statement line had no description — «Без описания»
-     * as the title, no «Описание в выписке» row. The purchase of `Detail` with an empty title.
+     * as the title, no «Описание» row. The purchase of `Detail` with an empty title.
      */
     @Test fun detailNoDescription() = capture("DetailNoDescription", detailState(purchase.copy(title = "", description = null)))
     // FIN-223 fixture: proposed artboard; snapshots are not executed under the current instruction.
