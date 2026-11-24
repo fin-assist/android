@@ -274,6 +274,9 @@ private fun ColumnScope.Guide(
                 DownloadTexts.instruction(config),
                 "Выберите скачанный файл ниже",
             ),
+            firstStepHint = "Если в браузере не установлены сертификаты Минцифры, может открыться страница status.tbank-online.com. " +
+                "В разделе «Зеркало tbank.ru» нажмите «Перейти». " +
+                "На главной странице выберите «Личный кабинет» → «Интернет-банк».",
         )
         Spacer(Modifier.height(d.space2))
         Column(verticalArrangement = Arrangement.spacedBy(d.space3)) {
