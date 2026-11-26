@@ -6,4 +6,5 @@ plugins {
 dependencies {
     implementation(libs.androidx.browser)
     implementation(libs.androidx.datastore.preferences)
+    testImplementation(libs.androidx.compose.ui.test.junit4)
 }

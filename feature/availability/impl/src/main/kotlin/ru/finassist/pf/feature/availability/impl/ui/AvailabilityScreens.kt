@@ -168,7 +168,7 @@ private fun GateScreen(
                 .padding(bottom = d.space4)
                 .testTag(tag),
         ) {
-            Column(Modifier.fillMaxWidth().background(c.nav).then(screenMargin).padding(top = d.space6)) {
+            Column(Modifier.fillMaxWidth().background(c.nav).then(screenMargin).padding(top = d.space6, bottom = d.space4)) {
                 PfStatusHero(tone = tone, icon = icon, centered = false)
                 Spacer(Modifier.height(d.space5))
                 Text(title, style = PfTheme.type.title1, color = c.text, modifier = Modifier.semantics { heading() })
