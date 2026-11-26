@@ -199,8 +199,7 @@ tags:
     file: ../../subflows/config.yaml
     env:
       LINK: "pfe2e://config?consent_type=personal_data&expect_consent_reads=5&expect_consent_starts=pd-1&expect_consent_registers="
-# Returning from the control screen can restore the focused phone field's keyboard.
-- hideKeyboard
+# Require the label to be visible when the restored keyboard covers part of the button.
 - scrollUntilVisible:
     element:
       id: "auth.phone.submit"
