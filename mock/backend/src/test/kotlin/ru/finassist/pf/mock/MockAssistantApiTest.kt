@@ -115,7 +115,7 @@ class MockAssistantApiTest {
         backend.config = backend.config.copy(assistantBudgetGuide = true)
         val fixture = ask(question, k = "budget-guide-fixture")
         val snapshot = finalSnapshot(fixture.answerId)
-        val expected = "Чтобы составить бюджет:\n\n" +
+        val expected = "Чтобы составить бюджет:\nСначала определите цель.\n\n" +
             "1. **Посчитайте доходы.** Сложите все поступления.\n" +
             "2. **Запишите расходы.** Разделите их на обязательные и остальные."
         assertEquals(AnswerStatus.COMPLETE, snapshot.status)

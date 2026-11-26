@@ -30,7 +30,7 @@ class AnswerFormatTest {
         val parts = AnswerFormat.parse("За апрель ушло **7 200 ₽**, все с июля.\nВ среднем 2 400 ₽.\n\n- раз\n- **два**\nХвост с ** без пары")
         assertEquals(4, parts.size)
         val p0 = parts[0] as TextPart.Paragraph
-        assertEquals(listOf("За апрель ушло ", "7 200 ₽", ", все с июля. В среднем 2 400 ₽."), p0.spans.map { it.text })
+        assertEquals(listOf("За апрель ушло ", "7 200 ₽", ", все с июля.\nВ среднем 2 400 ₽."), p0.spans.map { it.text })
         assertEquals(listOf(false, true, false), p0.spans.map { it.bold })
         assertEquals("раз", (parts[1] as TextPart.Bullet).spans.single().text)
         assertEquals(true, (parts[2] as TextPart.Bullet).spans.single().bold)
@@ -38,7 +38,7 @@ class AnswerFormatTest {
     }
 
     @Test
-    fun `numbered lines keep their original numbers and bold headings`() {
+    fun `streamed and stored replies preserve numbered and ordinary line breaks`() {
         val source = "Чтобы составить бюджет:\n\n1. **Доходы.** Учтите зарплату.\n" +
             "2. **Расходы.** Распределите траты.\nУчтите обязательные платежи.\n10. **План.**"
         val chunks = listOf(source.substringBefore("2. "), "2.", source.substringAfter("2. ").let { " $it" })
@@ -50,7 +50,7 @@ class AnswerFormatTest {
                 TextPart.Span("Доходы.", bold = true),
                 TextPart.Span(" Учтите зарплату.\n2. ", bold = false),
                 TextPart.Span("Расходы.", bold = true),
-                TextPart.Span(" Распределите траты. Учтите обязательные платежи.\n10. ", bold = false),
+                TextPart.Span(" Распределите траты.\nУчтите обязательные платежи.\n10. ", bold = false),
                 TextPart.Span("План.", bold = true),
             )),
         )
@@ -60,11 +60,11 @@ class AnswerFormatTest {
     }
 
     @Test
-    fun `numbered lines do not split inline numbers or decimal amounts`() {
+    fun `inline numbers and decimal amounts stay on their original lines`() {
         val parts = AnswerFormat.parse("Варианты 1. Доходы и 2. Расходы.\n2026.11.26 — перевод на 12.50 ₽.")
         assertEquals(
             listOf(TextPart.Paragraph(listOf(TextPart.Span(
-                "Варианты 1. Доходы и 2. Расходы. 2026.11.26 — перевод на 12.50 ₽.",
+                "Варианты 1. Доходы и 2. Расходы.\n2026.11.26 — перевод на 12.50 ₽.",
                 bold = false,
             )))),
             parts,

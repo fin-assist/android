@@ -27,9 +27,7 @@ sealed interface TextPart {
 
 object AnswerFormat {
 
-    private val numberedLineStart = Regex("""^[0-9]+\.[ \t]""")
-
-    /** Everything outside the subset is kept as plain text (an unmatched `**` stays literal). */
+    /** Keeps line breaks within paragraphs and treats unsupported markup as plain text. */
     fun parse(text: String): List<TextPart> {
         val parts = mutableListOf<TextPart>()
         val paragraph = StringBuilder()
@@ -46,8 +44,7 @@ object AnswerFormat {
                     parts += TextPart.Bullet(spans(line.removePrefix("- ").trim()))
                 }
                 else -> {
-                    // The number marker stays literal. Keep its source line break while joining soft wraps.
-                    if (paragraph.isNotEmpty()) paragraph.append(if (numberedLineStart.containsMatchIn(line)) '\n' else ' ')
+                    if (paragraph.isNotEmpty()) paragraph.append('\n')
                     paragraph.append(line)
                 }
             }

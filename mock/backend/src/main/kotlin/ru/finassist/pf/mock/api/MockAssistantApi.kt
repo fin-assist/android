@@ -282,7 +282,7 @@ class MockAssistantApi(private val backend: MockBackend) : AssistantApi {
     companion object {
         private const val DAILY_MAX = 5
         private const val BUDGET_GUIDE_QUESTION = "How do I make a budget?"
-        private const val BUDGET_GUIDE_ANSWER = "Чтобы составить бюджет:\n\n" +
+        private const val BUDGET_GUIDE_ANSWER = "Чтобы составить бюджет:\nСначала определите цель.\n\n" +
             "1. **Посчитайте доходы.** Сложите все поступления.\n" +
             "2. **Запишите расходы.** Разделите их на обязательные и остальные."
 
