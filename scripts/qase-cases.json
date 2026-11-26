@@ -31,6 +31,7 @@
     ".maestro/flows/assistant/about.yaml": 100,
     "ru.finassist.pf.AssistantAboutDocumentTest#opensCurrentDocumentOnlyAfterATapAndRecoversFromAnOfflineRead": 100,
     ".maestro/flows/assistant/ask_question.yaml": 12,
+    "ru.finassist.pf.AssistantComposerKeyboardTest#requestsSentenceCapitalizationAndSendsTheTypedCase": 12,
     ".maestro/flows/assistant/daily_limit.yaml": 13,
     ".maestro/flows/statements/upload_and_history.yaml": 14,
     "ru.finassist.pf.StatementPickerTest#opensPrivacyPolicyFromUploadNotice": 14,

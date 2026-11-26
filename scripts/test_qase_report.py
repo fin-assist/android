@@ -335,6 +335,9 @@ class CaseMapTest(unittest.TestCase):
         expected = {2: {
             ".maestro/flows/auth/register_new_user.yaml",
             "ru.finassist.pf.StatementPickerTest#opensPrivacyPolicyBeforeRegistration",
+        }, 12: {
+            ".maestro/flows/assistant/ask_question.yaml",
+            "ru.finassist.pf.AssistantComposerKeyboardTest#requestsSentenceCapitalizationAndSendsTheTypedCase",
         }, 14: {
             ".maestro/flows/statements/upload_and_history.yaml",
             "ru.finassist.pf.StatementPickerTest#opensPrivacyPolicyFromUploadNotice",
