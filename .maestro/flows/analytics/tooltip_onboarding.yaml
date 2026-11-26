@@ -61,6 +61,7 @@ tags:
     element:
       id: "analytics.tile.daily.help"
     direction: UP
+    centerElement: true
 - assertNotVisible:
     id: "analytics.tile.daily.help.popup"
 - tapOn:
@@ -68,14 +69,19 @@ tags:
 - assertVisible:
     id: "analytics.tile.daily.help.popup"
 - back
-- runFlow:
-    file: ../../subflows/reveal_tag_up.yaml
-    env:
-      TARGET_ID: "analytics.ask.help"
+# The help container can overlap the sticky header while the icon is still clipped.
+- scrollUntilVisible:
+    element:
+      text: "Пояснение: Спросите о своих финансах"
+    direction: UP
+- assertVisible:
+    id: "analytics.screen"
+- assertNotVisible:
+    id: "ds.refresh.indicator"
 - assertNotVisible:
     id: "analytics.ask.help.popup"
 - tapOn:
-    id: "analytics.ask.help"
+    text: "Пояснение: Спросите о своих финансах"
 - assertVisible:
     id: "analytics.ask.help.popup"
 - assertNotVisible:

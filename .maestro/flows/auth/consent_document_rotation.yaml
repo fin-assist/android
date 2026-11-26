@@ -199,13 +199,18 @@ tags:
     file: ../../subflows/config.yaml
     env:
       LINK: "pfe2e://config?consent_type=personal_data&expect_consent_reads=5&expect_consent_starts=pd-1&expect_consent_registers="
+# Require the label to be visible when the restored keyboard covers part of the button.
 - scrollUntilVisible:
     element:
       id: "auth.phone.submit"
+      containsChild:
+        text: "Повторить"
+      enabled: true
 - tapOn:
     id: "auth.phone.submit"
     containsChild:
       text: "Повторить"
+    enabled: true
 - extendedWaitUntil:
     visible:
       id: "auth.phone.document"
