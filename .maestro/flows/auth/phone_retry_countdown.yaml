@@ -1,0 +1,72 @@
+appId: ru.finassist.pf.mock.e2e
+name: Вход после лимита попыток — отсчёт и повтор по нажатию
+tags:
+  - auth
+---
+- runFlow: ../../subflows/clear_state.yaml
+- launchApp
+- runFlow: ../../subflows/confirm_phone.yaml
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.input"
+- tapOn:
+    id: "auth.phone.input"
+- inputText: "9161234567"
+- hideKeyboard
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?error_operation=phone_start&error_scenario=phone_start_rate_limited&call_delay_ms=60000"
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.submit"
+- tapOn:
+    id: "auth.phone.submit"
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.submit"
+- assertVisible:
+    id: "auth.phone.submit"
+    containsChild:
+      text: "Повторить"
+    enabled: false
+- assertVisible: "Слишком много запросов\\. Попробуйте позже"
+- assertVisible:
+    id: "auth.phone.retryWait"
+    text: "Повторить можно через 0:([12][0-9]|30)"
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone.retryWait"
+      text: "Повторить можно через 0:0[1-9]"
+    timeout: 33000
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone.submit"
+      containsChild:
+        text: "Повторить"
+      enabled: true
+    timeout: 15000
+- assertNotVisible:
+    id: "auth.phone.retryWait"
+- assertNotVisible:
+    id: "auth.call"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?error_operation=off&expect_error_requests=1&consent_type=personal_data&expect_consent_reads=1&expect_consent_starts=2026-09-28&expect_consent_start_keys=1"
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.submit"
+- tapOn:
+    id: "auth.phone.submit"
+    containsChild:
+      text: "Повторить"
+    enabled: true
+- extendedWaitUntil:
+    visible:
+      id: "auth.call"
+    timeout: 20000
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_error_requests=1&consent_type=personal_data&expect_consent_reads=1&expect_consent_starts=2026-09-28,2026-09-28&expect_consent_start_keys=2"

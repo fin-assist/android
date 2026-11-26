@@ -71,6 +71,7 @@ class MockBackend(
         val scenario = mutex.withLock {
             if (config.errorOperation != operation) return@withLock null
             if (config.errorScenario == MockErrorScenario.POST_COMMIT_FAILURE && operation != MockErrorOperation.ANALYTICS_DISMISS) return@withLock null
+            if (config.errorScenario == MockErrorScenario.PHONE_START_RATE_LIMITED && operation != MockErrorOperation.PHONE_START) return@withLock null
             val postCommit = operation == MockErrorOperation.ANALYTICS_DISMISS &&
                 config.errorScenario == MockErrorScenario.POST_COMMIT_FAILURE
             if (postCommit != afterCommit) return@withLock null

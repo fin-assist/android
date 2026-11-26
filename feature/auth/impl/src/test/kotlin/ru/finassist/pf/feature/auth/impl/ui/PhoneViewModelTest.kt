@@ -210,12 +210,21 @@ class PhoneViewModelTest {
         assertEquals(deviceNow.plusSeconds(300).toInstant(), flow.callDeadline)
     }
 
-    @Test fun `too many attempts names the time to retry when the server gives it`() {
+    @Test fun `an unanchored retry target shows the server time without enabling Start`() {
         auth.failure = AppError.RateLimited(OffsetDateTime.parse("2026-10-13T14:05:00+03:00"))
-        assertEquals("Слишком много попыток. Повторите в 14:05", submitted().state.value.error)
+        val vm = submitted()
+        assertEquals("Слишком много попыток", vm.state.value.error)
+        assertEquals("Время повтора по данным сервера — 14:05", vm.state.value.retryWaitText)
+        assertFalse(vm.state.value.submitEnabled)
+        vm.submit()
+        assertEquals(1, auth.requests.size)
+
         flow.reset() // the second assertion is an independent attempt, not navigation around the first wait
         auth.failure = AppError.RateLimited(null)
-        assertEquals("Слишком много попыток", submitted().state.value.error)
+        val withoutWait = submitted().state.value
+        assertEquals("Слишком много попыток", withoutWait.error)
+        assertNull(withoutWait.retryWaitText)
+        assertTrue(withoutWait.submitEnabled)
     }
 
     @Test fun `a server error is the generic error`() {
@@ -384,9 +393,11 @@ class PhoneViewModelTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(scheduler))
         val vm = PhoneViewModel(auth, flow, tracker, clock, ElapsedClock { scheduler.currentTime })
         vm.setAgeConfirmed(true); vm.setConsentAccepted(true); vm.onInput(TextFieldValue("9161234567"))
-        auth.failure = AppError.RateLimited(deviceNow.plusMinutes(5), 1,
+        auth.failure = AppError.RateLimited(deviceNow.plusMinutes(5), 3,
             ru.finassist.pf.core.common.error.ErrorResponseInfo("RATE_LIMITED", 429, requestRetryable = false,
-                retryAfterSeconds = 1, timing = ResponseTiming(receivedElapsedMillis = 0)))
+                retryAfterSeconds = 3, timing = ResponseTiming(receivedElapsedMillis = 0),
+                presentation = ru.finassist.pf.core.common.error.ErrorPresentation(
+                    ru.finassist.pf.core.common.error.UserMessage.from("Попробуйте позже"))))
         vm.submit(); vm.submit()
         assertEquals(1, auth.keys.size)
         assertTrue(vm.state.value.newIntentRequired); assertFalse(vm.state.value.retryReady)
@@ -395,9 +406,19 @@ class PhoneViewModelTest {
         assertTrue(vm.state.value.ageConfirmed)
         assertTrue(vm.state.value.pdConsentAccepted)
         assertEquals(1, auth.keys.size)
-        assertEquals("Слишком много попыток. Повторите в 13:43", vm.state.value.error)
+        assertEquals("Слишком много попыток", vm.state.value.error)
+        assertEquals("Повторить можно через 0:03", vm.state.value.retryWaitText)
         assertEquals(auth.failure!!.presentation, vm.state.value.errorPresentation)
         scheduler.advanceTimeBy(1000); scheduler.runCurrent()
+        assertEquals("Повторить можно через 0:02", vm.state.value.retryWaitText)
+        scheduler.advanceTimeBy(1999); scheduler.runCurrent()
+        assertEquals("Повторить можно через 0:01", vm.state.value.retryWaitText)
+        assertFalse(vm.state.value.submitEnabled)
+        scheduler.advanceTimeBy(1); scheduler.runCurrent()
+        assertNull(vm.state.value.retryWaitText)
+        assertTrue(vm.state.value.submitEnabled)
+        assertEquals(1, auth.keys.size, "the deadline alone never sends a Start")
+
         auth.failure = null; vm.submit()
         assertEquals(2, auth.keys.size)
         assertNotEquals(auth.keys[0], auth.keys[1])
@@ -464,7 +485,8 @@ class PhoneViewModelTest {
         assertFalse(vm.state.value.retryReady)
         assertEquals(waitText, vm.state.value.error)
         assertEquals(waitPresentation, vm.state.value.errorPresentation)
-        assertEquals("Слишком много попыток. Повторите в 13:43", vm.state.value.error)
+        assertEquals("Слишком много попыток", vm.state.value.error)
+        assertEquals("Повторить можно через 0:01", vm.state.value.retryWaitText)
         scheduler.advanceTimeBy(1000); scheduler.runCurrent()
         auth.failure = null; vm.submit()
         assertEquals(2, auth.keys.size)
@@ -491,7 +513,7 @@ class PhoneViewModelTest {
         assertEquals(auth.documentVersion, vm.state.value.document?.version)
         assertFalse(vm.state.value.retrying)
         assertNull(vm.state.value.documentErrorPresentation)
-        assertNull(vm.state.value.documentRetryText)
+        assertNull(vm.state.value.retryWaitText)
         assertEquals(input, vm.state.value.input)
         assertTrue(vm.state.value.ageConfirmed)
         assertFalse(vm.state.value.pdConsentAccepted)
@@ -518,14 +540,15 @@ class PhoneViewModelTest {
             assertEquals(1, api.documentCalls)
             assertTrue(vm.state.value.retrying)
             assertFalse(vm.state.value.submitEnabled)
-            assertEquals("Слишком много попыток. Повторите в 13:43", vm.state.value.documentError)
+            assertEquals("Слишком много попыток", vm.state.value.documentError)
             assertEquals(presentation, vm.state.value.documentErrorPresentation)
-            assertEquals("Повторите в 13:43", vm.state.value.documentRetryText)
+            assertEquals("Повторить можно через 0:01", vm.state.value.retryWaitText)
 
             scheduler.advanceTimeBy(999); scheduler.runCurrent()
             assertFalse(vm.state.value.submitEnabled)
             scheduler.advanceTimeBy(1); scheduler.runCurrent()
             assertTrue(vm.state.value.submitEnabled)
+            assertNull(vm.state.value.retryWaitText)
             assertEquals(1, api.documentCalls, "the deadline alone never starts a GET")
 
             api.documentFailure = null
@@ -533,7 +556,7 @@ class PhoneViewModelTest {
             assertEquals(2, api.documentCalls)
             assertNull(vm.state.value.documentError)
             assertNull(vm.state.value.documentErrorPresentation)
-            assertNull(vm.state.value.documentRetryText)
+            assertNull(vm.state.value.retryWaitText)
             assertTrue(vm.state.value.ageConfirmed)
             assertEquals("9161234567", vm.state.value.digits)
             assertFalse(vm.state.value.pdConsentAccepted)
@@ -548,6 +571,7 @@ class PhoneViewModelTest {
                 retryAt = deviceNow.plusMinutes(5), timing = ResponseTiming(receivedElapsedMillis = 0)))
         val vm = PhoneViewModel(auth, flow, tracker, clock, ElapsedClock { elapsed })
         assertFalse(vm.state.value.submitEnabled)
+        assertEquals("Время повтора по данным сервера — 13:43", vm.state.value.retryWaitText)
         elapsed = 24L * 60 * 60 * 1000
         vm.submit(); vm.setAgeConfirmed(true); vm.submit()
         assertFalse(vm.state.value.submitEnabled)
@@ -586,7 +610,7 @@ class PhoneViewModelTest {
         assertEquals(PhoneEvent.GoToCall, vm.events.value)
     }
 
-    @Test fun `document and Start retry times use clock zone instead of the server timestamp offset`() {
+    @Test fun `unanchored document and Start retry hints display the server target in the user's time zone`() {
         for ((target, zone, shown) in listOf(
             Triple(OffsetDateTime.parse("2026-10-13T10:43:00Z"), Clock.MOSCOW, "13:43"),
             Triple(OffsetDateTime.parse("2026-10-13T13:43:00+03:00"), ZoneId.of("Asia/Novosibirsk"), "17:43"),
@@ -598,20 +622,40 @@ class PhoneViewModelTest {
             val api = FakeAuth()
             val presentation = ru.finassist.pf.core.common.error.ErrorPresentation(
                 ru.finassist.pf.core.common.error.UserMessage.from("Подождите перед загрузкой"))
-            val limited = AppError.RateLimited(target, 1,
-                ru.finassist.pf.core.common.error.ErrorResponseInfo("RATE_LIMITED", 429, requestRetryable = false,
-                    retryAfterSeconds = 1, timing = ResponseTiming(receivedElapsedMillis = 0), presentation = presentation))
+            val limited = AppError.RateLimited(target,
+                response = ru.finassist.pf.core.common.error.ErrorResponseInfo("RATE_LIMITED", 429, requestRetryable = false,
+                    retryAt = target, timing = ResponseTiming(receivedElapsedMillis = 0), presentation = presentation))
             api.documentFailure = limited
             val documentVm = PhoneViewModel(api, SignInFlow(), tracker, localClock, ElapsedClock { 0L })
-            assertEquals("Слишком много попыток. Повторите в $shown", documentVm.state.value.documentError)
-            assertEquals("Повторите в $shown", documentVm.state.value.documentRetryText)
+            assertEquals("Время повтора по данным сервера — $shown", documentVm.state.value.retryWaitText)
             assertEquals(presentation, documentVm.state.value.documentErrorPresentation)
             api.documentFailure = null; api.failure = limited
             val startVm = PhoneViewModel(api, SignInFlow(), tracker, localClock, ElapsedClock { 0L })
             startVm.setAgeConfirmed(true); startVm.setConsentAccepted(true)
             startVm.onInput(TextFieldValue("9161234567")); startVm.submit()
-            assertEquals("Слишком много попыток. Повторите в $shown", startVm.state.value.error)
+            assertEquals("Время повтора по данным сервера — $shown", startVm.state.value.retryWaitText)
         }
+    }
+
+    @Test fun `a retry target with server Date counts down independently of device wall time`() {
+        val scheduler = kotlinx.coroutines.test.TestCoroutineScheduler()
+        Dispatchers.setMain(UnconfinedTestDispatcher(scheduler))
+        val serverDate = deviceNow.minusHours(2)
+        val target = serverDate.plusSeconds(61)
+        auth.failure = AppError.RateLimited(target,
+            response = ru.finassist.pf.core.common.error.ErrorResponseInfo("RATE_LIMITED", 429,
+                retryAt = target, requestRetryable = false,
+                timing = ResponseTiming(serverDate.toInstant(), receivedElapsedMillis = 0)))
+        val vm = PhoneViewModel(auth, flow, tracker, clock, ElapsedClock { scheduler.currentTime })
+        vm.setAgeConfirmed(true); vm.setConsentAccepted(true); vm.onInput(TextFieldValue("9161234567"))
+
+        vm.submit()
+        assertEquals("Повторить можно через 1:01", vm.state.value.retryWaitText)
+        assertFalse(vm.state.value.submitEnabled)
+        scheduler.advanceTimeBy(61000); scheduler.runCurrent()
+        assertNull(vm.state.value.retryWaitText)
+        assertTrue(vm.state.value.submitEnabled)
+        assertEquals(1, auth.requests.size)
     }
 
 }
