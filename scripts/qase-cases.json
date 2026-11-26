@@ -107,6 +107,8 @@
     "jvm:ru.finassist.pf.feature.analytics.impl.ui.AnalyticsReliabilityComponentTest#qase82RetainedSnapshotsAndRefusedMutation": 82,
     "jvm:ru.finassist.pf.feature.analytics.impl.ui.AnalyticsReliabilityComponentTest#qase83HistoryPagingAndSelection": 83,
     "jvm:ru.finassist.pf.feature.analytics.impl.ui.AnalyticsReliabilityComponentTest#qase89UnknownReadRecoveryAndDeferredSelection": 89,
-    "jvm:ru.finassist.pf.feature.analytics.impl.ui.AnalyticsReliabilityComponentTest#qase73PeriodRetryAndDeferredRefusal": 73
+    "jvm:ru.finassist.pf.feature.analytics.impl.ui.AnalyticsReliabilityComponentTest#qase73PeriodRetryAndDeferredRefusal": 73,
+    "ru.finassist.pf.AssistantAboutDocumentTest#chatUsesOneBottomInsetWithAndWithoutTabs": 103,
+    "ru.finassist.pf.CallSupportTest#opensSupportDraftWhileWaitingAndAfterExpiry": 104
   }
 }

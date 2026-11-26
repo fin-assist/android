@@ -8,7 +8,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.only
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -36,6 +39,7 @@ import ru.finassist.pf.IncomingStatement
 import ru.finassist.pf.core.designsystem.components.PfTabBar
 import ru.finassist.pf.core.designsystem.components.pfTestRoot
 import ru.finassist.pf.core.designsystem.components.PfMainTabs
+import ru.finassist.pf.core.designsystem.theme.PfInsets
 import ru.finassist.pf.core.designsystem.theme.PfTheme
 import ru.finassist.pf.core.navigation.FeatureEntry
 import ru.finassist.pf.core.navigation.NavControllerNavigator
@@ -302,7 +306,14 @@ private fun MainLayer(
             LocalAssistantAvailability provides assistantPolicy,
             LocalExternalStatementSelection provides externalStatement,
         ) {
-            NavHost(controller, startDestination = OperationsRoutes.Feed, modifier = Modifier.weight(1f)) {
+            val chatAboveTabs = activeTab >= 0 && destination?.hasRoute<AssistantRoutes.Chat>() == true
+            val hostModifier = if (chatAboveTabs) {
+                // The tab bar already places this destination above the system navigation bar.
+                Modifier.consumeWindowInsets(PfInsets.navigationBars.only(WindowInsetsSides.Bottom))
+            } else {
+                Modifier
+            }
+            NavHost(controller, startDestination = OperationsRoutes.Feed, modifier = Modifier.weight(1f).then(hostModifier)) {
                 entries.forEach { entry -> with(entry) { install(navigator) } }
             }
         }

@@ -99,7 +99,7 @@ class AuthLayoutTest {
                 CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, fontScale = 1.5f)) {
                     CallContent(
                         CallUiState(phoneDisplay = "+7 916 123-45-67", callbackNumber = "+7 495 000-00-00"),
-                        onDial = {}, onRequestAgain = {}, onRetry = {}, onChangeNumber = {},
+                        onDial = {}, onRequestAgain = {}, onRetry = {}, onChangeNumber = {}, onSupport = {},
                     )
                 }
             }
