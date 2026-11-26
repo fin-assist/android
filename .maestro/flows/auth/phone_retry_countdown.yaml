@@ -4,7 +4,12 @@ tags:
   - auth
 ---
 - runFlow: ../../subflows/clear_state.yaml
-- launchApp
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?error_operation=phone_start&error_scenario=phone_start_rate_limited&call_delay_ms=60000"
+- launchApp:
+    stopApp: false
 - runFlow: ../../subflows/confirm_phone.yaml
 - scrollUntilVisible:
     element:
@@ -13,10 +18,6 @@ tags:
     id: "auth.phone.input"
 - inputText: "9161234567"
 - hideKeyboard
-- runFlow:
-    file: ../../subflows/config.yaml
-    env:
-      LINK: "pfe2e://config?error_operation=phone_start&error_scenario=phone_start_rate_limited&call_delay_ms=60000"
 - scrollUntilVisible:
     element:
       id: "auth.phone.submit"
