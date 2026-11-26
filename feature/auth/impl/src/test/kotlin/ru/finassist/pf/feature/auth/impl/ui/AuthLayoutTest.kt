@@ -8,15 +8,18 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.Density
@@ -111,5 +114,33 @@ class AuthLayoutTest {
         val beforeDial = charge.fetchSemanticsNode().positionInRoot.y < dial.fetchSemanticsNode().positionInRoot.y
         assertTrue(beforeDial)
         dial.performScrollTo().assertIsDisplayed()
+    }
+
+    @Test fun `support can be reached and opened in call failure states`() {
+        val lockedMessage = "Слишком много попыток. Позвонить можно будет через 10 минут"
+        val failureStates = listOf(
+            CallPhase.OFFLINE to "Не удаётся подключиться к серверу",
+            CallPhase.ERROR to "Не получилось проверить звонок. Попробуйте ещё раз",
+            CallPhase.LOCKED to lockedMessage,
+        )
+        val phase = mutableStateOf(CallPhase.OFFLINE)
+        var supportClicks = 0
+        compose.setContent {
+            PfTheme {
+                CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, fontScale = 1.5f)) {
+                    CallContent(
+                        CallUiState(phoneDisplay = "+7 916 123-45-67", callbackNumber = "+7 495 000-00-00", phase = phase.value, lockText = lockedMessage),
+                        onDial = {}, onRequestAgain = {}, onRetry = {}, onChangeNumber = {}, onSupport = { supportClicks++ },
+                    )
+                }
+            }
+        }
+
+        failureStates.forEachIndexed { index, (currentPhase, message) ->
+            compose.runOnIdle { phase.value = currentPhase }
+            compose.onNodeWithText(message, substring = true).performScrollTo().assertIsDisplayed()
+            compose.onNodeWithTag(AuthTags.CALL_SUPPORT).performScrollTo().assertIsDisplayed().assertIsEnabled().performClick()
+            compose.runOnIdle { assertEquals(index + 1, supportClicks, currentPhase.name) }
+        }
     }
 }
