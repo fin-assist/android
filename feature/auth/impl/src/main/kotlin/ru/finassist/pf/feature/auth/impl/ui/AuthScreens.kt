@@ -50,6 +50,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ru.finassist.pf.core.common.LegalLinks
+import ru.finassist.pf.core.common.Support
 import ru.finassist.pf.core.designsystem.components.ButtonVariant
 import ru.finassist.pf.core.designsystem.components.HeroTone
 import ru.finassist.pf.core.designsystem.components.NoticeTone
@@ -233,6 +234,13 @@ fun CallScreen(onBack: () -> Unit, onNewUser: () -> Unit, onRegistrationClosed: 
         onRequestAgain = vm::requestAgain,
         onRetry = vm::retry,
         onChangeNumber = onBack,
+        onSupport = {
+            val draft = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:")).apply {
+                putExtra(Intent.EXTRA_EMAIL, arrayOf(Support.EMAIL))
+                putExtra(Intent.EXTRA_SUBJECT, "Не получилось подтвердить номер телефона")
+            }
+            runCatching { context.startActivity(draft) }
+        },
     )
 }
 
@@ -243,6 +251,7 @@ internal fun CallContent(
     onRequestAgain: () -> Unit,
     onRetry: () -> Unit,
     onChangeNumber: () -> Unit,
+    onSupport: () -> Unit,
 ) {
     val d = PfTheme.dimens
     val c = PfTheme.colors
@@ -344,6 +353,10 @@ internal fun CallContent(
                 }
             }
             Row { PfLink("Изменить номер", onClick = onChangeNumber, modifier = Modifier.testTag(AuthTags.CALL_CHANGE_NUMBER)) }
+            PfButton(
+                "Написать в поддержку", onClick = onSupport, variant = ButtonVariant.SECONDARY, block = true,
+                modifier = Modifier.testTag(AuthTags.CALL_SUPPORT),
+            )
         }
     }
 }
@@ -495,6 +508,7 @@ internal object AuthTags {
     const val CALL_CONFIRMING = "auth.call.confirming"
     const val CALL_RETRY = "auth.call.retry"
     const val CALL_CHANGE_NUMBER = "auth.call.change_number"
+    const val CALL_SUPPORT = "auth.call.support"
     const val CONSENT = "auth.consent"
     const val CONSENT_CHECKBOX = "auth.consent.checkbox"
     const val CONSENT_SUBMIT = "auth.consent.submit"

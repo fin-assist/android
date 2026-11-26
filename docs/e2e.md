@@ -785,6 +785,8 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 
 | Flow | Checks |
 |---|---|
+| `AssistantAboutDocumentTest#chatUsesOneBottomInsetWithAndWithoutTabs` | actual Android window inset is counted once with and without tabs; checks Compose bounds that Maestro cannot compare ([Qase103](https://app.qase.io/case/PLAINFIN-103), FIN-581) |
+| `CallSupportTest#opensSupportDraftWhileWaitingAndAfterExpiry` | signed-out call confirmation opens an email draft during waiting and after expiry; Espresso-Intents checks recipient, subject, and absence of personal data or attachments. The JVM `AuthLayoutTest` also checks that the support action can be reached and clicked at large font scale in offline, error, and locked states ([Qase104](https://app.qase.io/case/PLAINFIN-104), FIN-581) |
 | `refresh/server_data` | pull-to-refresh on the feed, operation details, empty search, selected analytics month, profile, upload history, unread lines and an assistant draft; offline retains data/query/period, online clears the failure; after a failed Year switch, failed/successful Month pulls and current-read Retry preserve Month and its separate target notice, then only the Year Retry changes the period; a history read never asks or retries a question (Qase70, FIN-399); authored, not executed |
 | `auth/register_new_user` (smoke) | empty mock history prepared through UI before registration; independent 14+/PD before phone → new number → standalone «Политика конфиденциальности», no terms/acceptance text → create account without another consent → passcode → first upload offers «Скачать за год» and reachable «Загружу позже» → result → feed (Qase2, FIN-365, FIN-416/427/519) |
 | `auth/sign_in_existing_user` (smoke) | independent 14+/PD before phone → existing account → return from the dialer without placing a call → confirmation status with dial and change-number actions available → passcode after mock verification → feed and main tabs (Qase1, FIN-365, FIN-560) |
@@ -931,6 +933,10 @@ additional UTP artifact, install the `mockE2e` app and test APKs and run the foc
 AndroidJUnitRunner with an external timeout. Android Package Manager resolved `application/x-ofx` to MainActivity
 and returned no matching activity for `application/octet-stream` or `text/plain` in the app.
 See [Qase99](https://app.qase.io/case/PLAINFIN-99).
+
+Not covered yet (FIN-581): the chat regression test measures the actual navigation inset with the keyboard closed.
+Verifying the composer above the real IME requires a device check. On the local API 36 emulator, the system declined
+the keyboard show request from the instrumented test even after the text field gained focus.
 
 Not covered yet (FIN-549): the T-Bank account download itself requires an authenticated test account and a real
 statement response. The Chrome observations above used synthetic attachments.

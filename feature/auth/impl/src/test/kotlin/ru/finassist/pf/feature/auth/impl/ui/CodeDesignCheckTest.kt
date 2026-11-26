@@ -21,7 +21,7 @@ class CodeDesignCheckTest {
 
     private fun capture(name: String, state: CallUiState = this.state, dark: Boolean = false) =
         DesignCheck.capture(name, dark = dark) {
-            CallContent(state, onDial = {}, onRequestAgain = {}, onRetry = {}, onChangeNumber = {})
+            CallContent(state, onDial = {}, onRequestAgain = {}, onRetry = {}, onChangeNumber = {}, onSupport = {})
         }
 
     @Test fun code() = capture("Code")
