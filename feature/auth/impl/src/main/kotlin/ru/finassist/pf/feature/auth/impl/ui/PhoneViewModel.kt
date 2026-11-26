@@ -22,9 +22,10 @@ import ru.finassist.pf.core.common.error.AppError
 import ru.finassist.pf.core.common.time.Clock
 import ru.finassist.pf.core.tracking.Events
 import ru.finassist.pf.core.tracking.Tracker
-import ru.finassist.pf.feature.auth.impl.domain.CallDeadline
 import ru.finassist.pf.feature.auth.impl.domain.PhoneFormat
+import ru.finassist.pf.feature.auth.impl.domain.RetryWaitTexts
 import ru.finassist.pf.feature.auth.impl.domain.SignInFlow
+import java.time.OffsetDateTime
 import javax.inject.Inject
 
 data class PhoneUiState(
@@ -36,7 +37,7 @@ data class PhoneUiState(
     val documentBusy: Boolean = false,
     val documentError: String? = null,
     val documentErrorPresentation: ErrorPresentation? = null,
-    val documentRetryText: String? = null,
+    val retryWaitText: String? = null,
     val documentRefreshRequired: Boolean = false,
     val documentRefreshReady: Boolean = true,
     val newIntentRequired: Boolean = false,
@@ -74,30 +75,33 @@ class PhoneViewModel @Inject constructor(
     )
     private val retryGate = flow.phoneStartGate(elapsedClock)
     private val documentGate = RequestRetryGate(elapsedClock)
+    private var documentRetryAt: OffsetDateTime? = null
     private var rejectedVersion: String? = null
     private var inputGeneration = 0L
     init {
         viewModelScope.launch { retryGate.readiness.collect { updateReadiness() } }
-        viewModelScope.launch { retryGate.waitReadiness.collect { updateReadiness() } }
-        viewModelScope.launch { documentGate.waitReadiness.collect { updateReadiness() } }
+        viewModelScope.launch { retryGate.remainingWait.collect { updateReadiness() } }
+        viewModelScope.launch { documentGate.remainingWait.collect { updateReadiness() } }
         refreshDocument()
     }
-    private fun canStart(): Boolean =
-        retryGate.isReady() || (retryGate.isExplicitlyForbidden() && retryGate.remainingMillis() == 0L)
-
     private fun hasExpiredStartKey(phone: String): Boolean =
         flow.phoneRequest?.phone == phone && flow.currentPhoneKey()?.replayWindow?.isOpen(elapsedClock) == false
 
     private fun updateReadiness() {
-        val waiting = retryGate.receivedRateLimit?.takeIf { !retryGate.isReady() }
+        val startWait = retryGate.remainingMillis()
+        val documentWait = documentGate.remainingMillis()
+        val waiting = retryGate.receivedRateLimit?.takeIf { startWait != 0L }
         _state.update {
+            val needsDocument = rejectedVersion != null || it.document == null
             it.copy(
-                retryReady = canStart() && rejectedVersion == null,
+                retryReady = startWait == 0L && rejectedVersion == null,
                 newIntentRequired = retryGate.newIntentRequired || retryGate.isExplicitlyForbidden() ||
                     it.replayUnavailable || hasExpiredStartKey(PhoneFormat.toE164(it.digits)),
-                documentRefreshReady = documentGate.remainingMillis() == 0L,
-                documentRefreshRequired = rejectedVersion != null || it.document == null,
-                error = waiting?.let { limit -> rateLimitText(limit.retryAt) } ?: it.error,
+                documentRefreshReady = documentWait == 0L,
+                documentRefreshRequired = needsDocument,
+                retryWaitText = if (needsDocument) RetryWaitTexts.of(documentWait, documentRetryAt, clock.zone)
+                    else RetryWaitTexts.of(startWait, waiting?.retryAt, clock.zone),
+                error = if (waiting != null) RATE_LIMIT_TEXT else it.error,
                 errorPresentation = waiting?.presentation ?: it.errorPresentation,
             )
         }
@@ -128,7 +132,8 @@ class PhoneViewModel @Inject constructor(
     }
     private fun refreshDocument() {
         if (_state.value.documentBusy || _state.value.busy || !documentGate.isReady()) return
-        _state.update { it.copy(documentBusy = true, documentError = null, documentErrorPresentation = null, documentRetryText = null) }
+        documentRetryAt = null
+        _state.update { it.copy(documentBusy = true, documentError = null, documentErrorPresentation = null) }
         updateReadiness()
         viewModelScope.launch {
             try {
@@ -141,18 +146,15 @@ class PhoneViewModel @Inject constructor(
                     _state.update { it.copy(error = null, errorPresentation = null, startFailed = false) }
                 }
                 _state.update { it.copy(document = document, pdConsentAccepted = if (changed) false else it.pdConsentAccepted,
-                    documentErrorPresentation = null, documentRetryText = null,
+                    documentErrorPresentation = null,
                     documentError = if (rejectedVersion != null) "Новая версия согласия пока недоступна. Обновите документ позже" else null) }
                 documentGate.clear()
             } catch (e: AppError) {
+                documentRetryAt = e.response?.retryAt ?: (e as? AppError.RateLimited)?.retryAt
                 documentGate.record(e)
-                val retryAt = (e as? AppError.RateLimited)?.retryAt ?: e.response?.retryAt
                 _state.update { it.copy(
-                    documentError = if (e is AppError.RateLimited) rateLimitText(retryAt) else "Не получилось загрузить документ согласия",
+                    documentError = if (e is AppError.RateLimited) RATE_LIMIT_TEXT else "Не получилось загрузить документ согласия",
                     documentErrorPresentation = e.presentation,
-                    // A safe server user_message replaces the fallback, so show the captured retry time separately.
-                    documentRetryText = retryAt?.takeIf { e is AppError.RateLimited && e.presentation.userMessage is ru.finassist.pf.core.common.error.UserMessage.Safe }
-                        ?.let(::retryTimeText),
                 ) }
             } finally {
                 _state.update { it.copy(documentBusy = false) }; updateReadiness()
@@ -193,7 +195,8 @@ class PhoneViewModel @Inject constructor(
             }
             return
         }
-        if (!canStart()) return
+        // A refused original can only become a new Start, with a fresh key, after its captured wait.
+        if (retryGate.remainingMillis() != 0L) return
         if (!state.ageConfirmed) {
             _state.update { it.copy(error = "Подтвердите, что вам исполнилось 14 лет") }; return
         }
@@ -263,15 +266,9 @@ class PhoneViewModel @Inject constructor(
 
     fun consumeEvent() { _events.value = null }
 
-    private fun retryTimeText(retryAt: java.time.OffsetDateTime): String =
-        "Повторите в ${CallDeadline.clockText(retryAt.toInstant(), clock.zone)}"
-
-    private fun rateLimitText(retryAt: java.time.OffsetDateTime?): String =
-        "Слишком много попыток" + (retryAt?.let { ". ${retryTimeText(it)}" } ?: "")
-
     private fun errorText(e: AppError): String = when (e) {
         is AppError.Offline -> "Не получилось отправить номер"
-        is AppError.RateLimited -> rateLimitText(e.retryAt)
+        is AppError.RateLimited -> RATE_LIMIT_TEXT
         // The server checks the format too (api.md 1.1): a violation at `phone`, whatever its code, is the field's error.
         is AppError.Api -> if (e.code == ErrorCodes.VALIDATION_ERROR && e.details.any { it.field == "phone" }) {
             "Нужен российский номер: +7 и 10 цифр"
@@ -282,3 +279,5 @@ class PhoneViewModel @Inject constructor(
     }
 
 }
+
+private const val RATE_LIMIT_TEXT = "Слишком много попыток"

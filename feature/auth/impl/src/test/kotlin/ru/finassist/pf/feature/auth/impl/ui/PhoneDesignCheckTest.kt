@@ -43,24 +43,26 @@ class PhoneDesignCheckTest {
     @Test fun retryAfterRefusal() = capture("PhoneRetryAfterRefusal", PhoneUiState(
         document = document, ageConfirmed = true, pdConsentAccepted = true, input = TextFieldValue("9161234567"),
         newIntentRequired = true, error = "Не получилось отправить номер. Попробуйте ещё раз"))
-    @Test fun newIntentWait() = capture("PhoneNewIntentWait", PhoneUiState(document = document, ageConfirmed = true, pdConsentAccepted = true, newIntentRequired = true, retryReady = false, error = "Слишком много попыток"))
+    @Test fun newIntentWait() = capture("PhoneNewIntentWait", PhoneUiState(
+        document = document, ageConfirmed = true, pdConsentAccepted = true, newIntentRequired = true,
+        retryReady = false, error = "Слишком много попыток", retryWaitText = "Повторить можно через 0:12"))
     @Test fun newIntentWaitAfterEdit() = capture("PhoneNewIntentWaitAfterEdit", PhoneUiState(document = document,
         ageConfirmed = true, pdConsentAccepted = true, input = TextFieldValue("9031234567"), newIntentRequired = true,
-        retryReady = false, error = "Слишком много попыток. Повторите в 14:05"))
+        retryReady = false, error = "Слишком много попыток", retryWaitText = "Повторить можно через 0:12"))
     @Test fun documentRefused() = capture("PhoneDocumentRefused", PhoneUiState(
         documentError = "Не получилось загрузить документ согласия", documentRefreshRequired = true))
     @Test fun documentRefusedDark() = capture("PhoneDocumentRefusedDark", PhoneUiState(
         documentError = "Не получилось загрузить документ согласия", documentRefreshRequired = true), dark = true)
 
     @Test fun documentRefusedWait() = capture("PhoneDocumentRefusedWait", PhoneUiState(
-        documentError = "Слишком много попыток. Повторите в 14:05", documentRefreshRequired = true,
+        documentError = "Слишком много попыток", documentRefreshRequired = true,
         documentErrorPresentation = ErrorPresentation(UserMessage.from("Подождите перед загрузкой документа"), ErrorSeverity.WARNING),
-        documentRetryText = "Повторите в 14:05",
+        retryWaitText = "Повторить можно через 0:12",
         documentRefreshReady = false))
     @Test fun documentRefusedWaitDark() = capture("PhoneDocumentRefusedWaitDark", PhoneUiState(
-        documentError = "Слишком много попыток. Повторите в 14:05", documentRefreshRequired = true,
+        documentError = "Слишком много попыток", documentRefreshRequired = true,
         documentErrorPresentation = ErrorPresentation(UserMessage.from("Подождите перед загрузкой документа"), ErrorSeverity.WARNING),
-        documentRetryText = "Повторите в 14:05",
+        retryWaitText = "Повторить можно через 0:12",
         documentRefreshReady = false), dark = true)
 
 }

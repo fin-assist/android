@@ -60,7 +60,7 @@ import javax.inject.Inject
  *   app's screen is paused under it, so the openings to count must have happened before the link is opened.
  * - `expect_stream_rate_limited_exact=<n>` — exact count, including a check that resume did not open early.
  * - `error_operation=profile_update|operations_list|assistant_ask|phone_start|analytics_dismiss|off` — inject only a fixed safe failure at that API method.
- * - `error_scenario=unknown_code|unknown_severity|invalid_message|legacy_response|retry_forbidden|terminal_failure|post_commit_failure` — closed wire fixtures.
+ * - `error_scenario=unknown_code|unknown_severity|invalid_message|legacy_response|retry_forbidden|terminal_failure|post_commit_failure|phone_start_rate_limited` — closed wire fixtures.
  *   With `analytics_dismiss`, `post_commit_failure` saves the assignment before a retryable 500; GET remains usable.
  * - `expect_error_requests=<n>` — require exactly n injected failures; proves a refused request was not resent.
  * - `pending_upload_fixture=october` — seed an unknown-age pending UUID for the closed bundled OFX fixture.
@@ -251,6 +251,10 @@ class E2eControlActivity : ComponentActivity() {
         if (backend.config.errorScenario == MockErrorScenario.POST_COMMIT_FAILURE &&
             backend.config.errorOperation != null && backend.config.errorOperation != MockErrorOperation.ANALYTICS_DISMISS) {
             unmet = "post-commit failure requires analytics_dismiss"
+        }
+        if (backend.config.errorScenario == MockErrorScenario.PHONE_START_RATE_LIMITED &&
+            backend.config.errorOperation != null && backend.config.errorOperation != MockErrorOperation.PHONE_START) {
+            unmet = "phone Start rate limit requires phone_start"
         }
         return unmet
     }

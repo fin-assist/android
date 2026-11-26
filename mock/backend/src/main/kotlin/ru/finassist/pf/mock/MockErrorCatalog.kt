@@ -83,13 +83,15 @@ internal fun MockBackend.injectedError(scenario: MockErrorScenario): AppError {
     if (scenario == MockErrorScenario.TERMINAL_FAILURE) return AppError.Server(500, response = errorInfo("INTERNAL_ERROR", 500, requestRetryable = false))
     if (scenario == MockErrorScenario.POST_COMMIT_FAILURE) return AppError.Server(500, response = errorInfo("INTERNAL_ERROR", 500, requestRetryable = true))
     if (scenario == MockErrorScenario.RETRY_FORBIDDEN) return rateLimitedError(now().plusSeconds(3), 3)
+    if (scenario == MockErrorScenario.PHONE_START_RATE_LIMITED) return rateLimitedError(retryAt = null, retryAfterSeconds = 30)
     val code = "FUTURE_OPERATION_FAILURE"
     val canonical = when (scenario) {
         MockErrorScenario.UNKNOWN_CODE -> "\"user_message\":\"Сервис получил новый тип ошибки. Попробуйте позже\",\"severity\":\"warning\""
         MockErrorScenario.UNKNOWN_SEVERITY -> "\"user_message\":\"Сервис получил новый тип ошибки. Попробуйте позже\",\"severity\":\"future_level\""
         MockErrorScenario.INVALID_MESSAGE -> "\"user_message\":null,\"severity\":\"warning\""
         MockErrorScenario.LEGACY_RESPONSE -> ""
-        MockErrorScenario.RETRY_FORBIDDEN, MockErrorScenario.TERMINAL_FAILURE, MockErrorScenario.POST_COMMIT_FAILURE -> error("handled above")
+        MockErrorScenario.RETRY_FORBIDDEN, MockErrorScenario.TERMINAL_FAILURE, MockErrorScenario.POST_COMMIT_FAILURE,
+        MockErrorScenario.PHONE_START_RATE_LIMITED -> error("handled above")
     }
     val json = "{\"code\":\"$code\",\"message\":\"internal diagnostic must not be displayed\"" +
         (if (canonical.isEmpty()) "" else ",$canonical") + "}"

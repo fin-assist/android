@@ -171,10 +171,17 @@ internal fun PhoneContent(
             state.documentError?.let { message ->
                 state.documentErrorPresentation?.let { ErrorMessage(it, message) }
                     ?: PfNotice(message, tone = NoticeTone.WARNING, alert = true)
-                state.documentRetryText?.let { Text(it, style = PfTheme.type.caption, color = PfTheme.colors.textMuted) }
             }
             state.errorPresentation?.let { presentation ->
                 ErrorMessage(presentation, state.error ?: "Не получилось отправить номер. Попробуйте ещё раз")
+            }
+            state.retryWaitText?.let {
+                Text(
+                    it,
+                    style = PfTheme.type.body,
+                    color = PfTheme.colors.text,
+                    modifier = Modifier.testTag(AuthTags.PHONE_RETRY_WAIT),
+                )
             }
             PfButton(
                 if (state.retrying) "Повторить" else "Продолжить",
@@ -501,6 +508,7 @@ internal object AuthTags {
     const val PHONE_DOCUMENT = "auth.phone.document"
     const val PHONE_INPUT = "auth.phone.input"
     const val PHONE_SUBMIT = "auth.phone.submit"
+    const val PHONE_RETRY_WAIT = "auth.phone.retryWait"
     const val PHONE_NOTICE = "auth.phone.notice"
     const val CALL = "auth.call"
     const val CALL_DIAL = "auth.call.dial"
