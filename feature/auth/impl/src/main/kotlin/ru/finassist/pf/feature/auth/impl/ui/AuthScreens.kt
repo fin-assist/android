@@ -253,7 +253,7 @@ internal fun CallContent(
             Spacer(Modifier.height(d.space4))
             Text("Позвоните нам для подтверждения", style = PfTheme.type.title1, color = c.text)
             Text(
-                "Позвоните с номера ${state.phoneDisplay} на наш номер. Мы сразу сбросим звонок — по нему и поймём, что номер ваш",
+                "Позвоните с номера ${state.phoneDisplay} на наш номер.",
                 style = PfTheme.type.lead, color = c.textMuted, modifier = Modifier.padding(top = d.space1),
             )
         }
