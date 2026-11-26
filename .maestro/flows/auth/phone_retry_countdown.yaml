@@ -40,10 +40,11 @@ tags:
       id: "auth.phone.retryWait"
       text: "Повторить можно через 0:0[1-9]"
     timeout: 33000
+# Maestro budgets assertions from the last interaction, so include the entire 30-second wait.
 - extendedWaitUntil:
     notVisible:
       id: "auth.phone.retryWait"
-    timeout: 15000
+    timeout: 45000
 - assertVisible:
     id: "auth.phone.submit"
     containsChild:
