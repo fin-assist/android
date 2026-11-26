@@ -99,18 +99,17 @@ class RequestRetryGate(private val clock: ElapsedClock) {
             }
         }
     }.distinctUntilChanged()
-    /** Wait only, not original-request permission: callers may offer their explicit new-context action afterwards. */
+
+    /** Countdown independent of replay permission. Null means the server deadline could not be anchored. */
     @OptIn(ExperimentalCoroutinesApi::class)
-    val waitReadiness: Flow<Boolean> = restriction.flatMapLatest { current ->
+    val remainingWait: Flow<Long?> = restriction.flatMapLatest {
         flow {
-            emit(remainingMillis() == 0L)
-            while (current.needsWait) {
-                val left = current.deadline?.remainingMillis(clock) ?: break
-                if (left == 0L) break
-                delay(minOf(left, 250L))
-                emit(remainingMillis() == 0L)
+            while (true) {
+                val left = remainingMillis()
+                emit(left)
+                if (left == null || left == 0L) break
+                delay((left - 1L) % 1000L + 1L)
             }
         }
     }.distinctUntilChanged()
-
 }

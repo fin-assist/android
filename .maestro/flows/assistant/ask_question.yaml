@@ -138,3 +138,31 @@ tags:
     id: "ds.back"
 - assertVisible:
     id: "assistant.chat"
+
+# FIN-577: the mockE2e budget guide contains ordinary and numbered line breaks.
+- tapOn:
+    id: "ds.chat.input"
+- inputText: "How do I make a budget?"
+- tapOn:
+    id: "ds.chat.send"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.answer"
+      containsDescendants:
+        - text: 'Чтобы составить бюджет:\nСначала определите цель[.]\n\n1[.] Посчитайте доходы[.] Сложите все поступления[.]\n2[.] Запишите расходы[.] Разделите их на обязательные и остальные[.]'
+    timeout: 20000
+- assertVisible: ".*[Оо]сталось 3 из 5.*"
+- tapOn:
+    id: "ds.back"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.ask"
+    timeout: 10000
+- tapOn:
+    id: "analytics.ask"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.answer"
+      containsDescendants:
+        - text: 'Чтобы составить бюджет:\nСначала определите цель[.]\n\n1[.] Посчитайте доходы[.] Сложите все поступления[.]\n2[.] Запишите расходы[.] Разделите их на обязательные и остальные[.]'
+    timeout: 15000

@@ -20,7 +20,7 @@ tags:
     visible:
       text: "Осталось 5 из 5 вопросов.*"
     timeout: 15000
-- assertNotVisible: "Попытка возвращается.*"
+- assertNotVisible: "Если Помощник не смог ответить.*"
 - scrollUntilVisible:
     element:
       id: "assistant.about.rules"
@@ -29,11 +29,11 @@ tags:
     id: "assistant.about.rules"
 - scrollUntilVisible:
     element:
-      text: "Повторяющиеся вопросы вне темы.*"
+      text: "Если часто задавать вопросы вне темы.*"
     direction: DOWN
 - scrollUntilVisible:
     element:
-      id: "assistant.about.document"
+      text: "Как помощник использует данные"
     direction: DOWN
 - assertVisible: "Как помощник использует данные"
 - tapOn:
@@ -63,7 +63,7 @@ tags:
       id: "assistant.about.sheet"
     timeout: 10000
 - assertVisible: "Что можно спросить"
-- assertNotVisible: "Попытка возвращается.*"
+- assertNotVisible: "Если Помощник не смог ответить.*"
 - tapOn:
     id: "ds.sheet.close"
 - assertVisible:

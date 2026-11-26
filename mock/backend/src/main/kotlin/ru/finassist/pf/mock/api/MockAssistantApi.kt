@@ -23,6 +23,7 @@ import ru.finassist.pf.core.api.model.AnswerStatus
 import ru.finassist.pf.core.api.model.AskRequest
 import ru.finassist.pf.core.api.model.AskResponse
 import ru.finassist.pf.core.api.model.AssistantLimit
+import ru.finassist.pf.core.api.model.Block
 import ru.finassist.pf.core.api.model.BlockType
 import ru.finassist.pf.core.api.model.ErrorCodes
 import ru.finassist.pf.core.api.model.IdempotencyKey
@@ -132,7 +133,17 @@ class MockAssistantApi(private val backend: MockBackend) : AssistantApi {
                 // The data the answer is calculated on: `calculated_at` and the version `changed_since` counts from.
                 calculatedAt = backend.now()
                 answer.calculatedOn = store.changes.version
-                engine.answer(text, mode, moscowToday())
+                if (backend.config.assistantBudgetGuide && text.equals(BUDGET_GUIDE_QUESTION, ignoreCase = true)) {
+                    AssistantEngine.Outcome.Answered(AssistantEngine.Answer(
+                        text = BUDGET_GUIDE_ANSWER,
+                        blocks = listOf(Block.text(BUDGET_GUIDE_ANSWER)),
+                        chips = emptyList(),
+                        dataRange = null,
+                        charged = true,
+                    ))
+                } else {
+                    engine.answer(text, mode, moscowToday())
+                }
             }
         }
         when (outcome) {
@@ -270,6 +281,10 @@ class MockAssistantApi(private val backend: MockBackend) : AssistantApi {
 
     companion object {
         private const val DAILY_MAX = 5
+        private const val BUDGET_GUIDE_QUESTION = "How do I make a budget?"
+        private const val BUDGET_GUIDE_ANSWER = "Чтобы составить бюджет:\nСначала определите цель.\n\n" +
+            "1. **Посчитайте доходы.** Сложите все поступления.\n" +
+            "2. **Запишите расходы.** Разделите их на обязательные и остальные."
 
         /** Texts of the failures (api.md 7.2): the client shows them instead of the answer. */
         val ERROR_TEXTS: Map<AnswerErrorCode, String> = MockErrorCatalog.answerTexts

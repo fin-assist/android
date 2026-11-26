@@ -17,6 +17,8 @@ data class MockConfig(
     val importStepDelayMs: Long = 600,
     /** Pause between streamed text chunks of an assistant answer. */
     val assistantChunkDelayMs: Long = 40,
+    /** Enable a canned answer with numbered lines for the Android UI fixture. */
+    val assistantBudgetGuide: Boolean = false,
     /** Load the bundled (or private) statement as the first upload on start. */
     val preloadStatement: Boolean = true,
     /** Assets tried for the preload, first found wins: your private statement, then the anonymized fixture. */

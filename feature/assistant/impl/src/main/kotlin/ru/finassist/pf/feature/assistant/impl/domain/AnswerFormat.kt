@@ -27,7 +27,7 @@ sealed interface TextPart {
 
 object AnswerFormat {
 
-    /** Everything outside the subset is kept as plain text (an unmatched `**` stays literal). */
+    /** Keeps line breaks within paragraphs and treats unsupported markup as plain text. */
     fun parse(text: String): List<TextPart> {
         val parts = mutableListOf<TextPart>()
         val paragraph = StringBuilder()
@@ -36,16 +36,16 @@ object AnswerFormat {
             paragraph.clear()
         }
         text.lines().forEach { raw ->
-            val line = raw.trimEnd()
+            val line = raw.trim()
             when {
-                line.isBlank() -> flush()
-                line.trimStart().startsWith("- ") -> {
+                line.isEmpty() -> flush()
+                line.startsWith("- ") -> {
                     flush()
-                    parts += TextPart.Bullet(spans(line.trimStart().removePrefix("- ").trim()))
+                    parts += TextPart.Bullet(spans(line.removePrefix("- ").trim()))
                 }
                 else -> {
-                    if (paragraph.isNotEmpty()) paragraph.append(' ')
-                    paragraph.append(line.trim())
+                    if (paragraph.isNotEmpty()) paragraph.append('\n')
+                    paragraph.append(line)
                 }
             }
         }

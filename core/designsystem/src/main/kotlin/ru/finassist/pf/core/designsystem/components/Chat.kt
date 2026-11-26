@@ -25,7 +25,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -33,6 +35,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -82,14 +85,18 @@ fun PfUserMessage(text: String, modifier: Modifier = Modifier) {
 @Composable
 fun PfMark(modifier: Modifier = Modifier, size: Dp = 32.dp, corner: Dp = size / 4, glyph: Dp = size * 32f / 56f) {
     val c = PfTheme.colors
-    Box(modifier.size(size).background(c.accent, RoundedCornerShape(corner)), contentAlignment = Alignment.Center) {
+    Canvas(modifier.size(size)) {
+        val side = this.size.minDimension
+        if (side == 0f || size == 0.dp) return@Canvas
+        val topLeft = center - Offset(side / 2f, side / 2f)
+        drawRoundRect(c.accent, topLeft, Size(side, side), CornerRadius(side * (corner / size)))
+
         // Three thin round-capped bars of the mockup's 24-unit glyph (x 7/12/17, tops 13/7/10, bottom 17).
-        Canvas(Modifier.size(glyph)) {
-            val u = this.size.width / 24f
-            val stroke = 2.25f * u
-            listOf(7f to 13f, 12f to 7f, 17f to 10f).forEach { (x, top) ->
-                drawLine(c.onAccent, Offset(x * u, top * u), Offset(x * u, 17f * u), strokeWidth = stroke, cap = StrokeCap.Round)
-            }
+        val unit = side * (glyph / size) / 24f
+        val glyphStart = center - Offset(12f * unit, 12f * unit)
+        listOf(7f to 13f, 12f to 7f, 17f to 10f).forEach { (x, top) ->
+            drawLine(c.onAccent, glyphStart + Offset(x * unit, top * unit), glyphStart + Offset(x * unit, 17f * unit),
+                strokeWidth = 2.25f * unit, cap = StrokeCap.Round)
         }
     }
 }
@@ -215,7 +222,10 @@ fun PfChatComposer(
                             maxLines = 4,
                             textStyle = PfTheme.type.lead.copy(color = if (idle) c.text else c.textMuted, fontSize = 16.sp),
                             cursorBrush = SolidColor(c.accent),
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                            keyboardOptions = KeyboardOptions(
+                                capitalization = KeyboardCapitalization.Sentences,
+                                imeAction = ImeAction.Send,
+                            ),
                             keyboardActions = KeyboardActions(onSend = { if (idle && sendEnabled) onSend() }),
                             modifier = Modifier
                                 .weight(1f)

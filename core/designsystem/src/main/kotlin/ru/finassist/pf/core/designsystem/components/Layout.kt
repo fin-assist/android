@@ -82,8 +82,7 @@ fun PfTabHeader(
             .fillMaxWidth()
             .background(PfTheme.colors.nav)
             .windowInsetsPadding(PfInsets.statusBars)
-            // Mockup `.pf-tabhead`: 8 dp under the status bar, a 48 dp row, the title centered in it (FIN-32).
-            .padding(start = PfTheme.dimens.screenMargin, end = PfTheme.dimens.space2, top = PfTheme.dimens.space2)
+            .padding(start = PfTheme.dimens.screenMargin, end = PfTheme.dimens.space2, top = PfTheme.dimens.space2, bottom = PfTheme.dimens.space2)
             .defaultMinSize(minHeight = PfTheme.dimens.touch),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -94,8 +93,8 @@ fun PfTabHeader(
 
 /**
  * Header of a nested screen (mockup `.pf-header`): back arrow (48), `title-2`, optional `hint` subtitle and a
- * trailing action on a `nav` background that extends through the status bar. The row has 8 dp above it, 12 dp
- * left and 20 dp right. The screen content starts with its own top padding.
+ * trailing action on a `nav` background that extends through the status bar. The row has 8 dp above and
+ * below it, 12 dp left and 20 dp right. The screen content starts with its own top padding.
  */
 @Composable
 fun PfPageHeader(
@@ -110,7 +109,7 @@ fun PfPageHeader(
             .fillMaxWidth()
             .background(PfTheme.colors.nav)
             .windowInsetsPadding(PfInsets.statusBars)
-            .padding(start = PfTheme.dimens.space3, end = PfTheme.dimens.space5, top = PfTheme.dimens.space2),
+            .padding(start = PfTheme.dimens.space3, end = PfTheme.dimens.space5, top = PfTheme.dimens.space2, bottom = PfTheme.dimens.space2),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (onBack != null) {

@@ -120,9 +120,11 @@ class ConsentViewModelTest {
     }
     @Test fun `explicit original request refusal prevents another POST`() {
         failures += AppError.Server(500, response = ErrorResponseInfo("INTERNAL_ERROR", 500, requestRetryable = false))
-        val vm = vm(); vm.send(); vm.submit()
+        val vm = vm()
+        vm.send()
+        vm.send()
         assertEquals(1, requests.size)
-        assertFalse(vm.state.value.retryReady)
+        eventually { !vm.state.value.retryReady }
     }
     @Test fun `duplicate taps while registering create a single request`() {
         pending = CompletableDeferred()

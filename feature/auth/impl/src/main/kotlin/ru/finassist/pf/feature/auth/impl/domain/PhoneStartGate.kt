@@ -15,14 +15,14 @@ internal class PhoneStartGate(clock: ElapsedClock) {
     var newIntentRequired: Boolean = false
         private set
     val readiness get() = gate.readiness
-    val waitReadiness get() = gate.waitReadiness
+    val remainingWait get() = gate.remainingWait
     fun remainingMillis() = gate.remainingMillis()
     fun isReady() = gate.isReady()
     fun isExplicitlyForbidden() = gate.isExplicitlyForbidden()
     fun record(error: AppError) {
         if (error is AppError.RateLimited) {
             newIntentRequired = true
-            receivedRateLimit = RateLimit(error.retryAt ?: error.response?.retryAt, error.presentation)
+            receivedRateLimit = RateLimit(error.response?.retryAt ?: error.retryAt, error.presentation)
             // This gate delays a NEW key; it never replays the refused original request.
             gate.record(AppError.RateLimited(error.retryAt, error.retryAfterSeconds, error.response?.copy(requestRetryable = null)))
         } else gate.record(error)

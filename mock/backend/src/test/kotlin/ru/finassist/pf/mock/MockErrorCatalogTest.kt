@@ -12,6 +12,7 @@ import ru.finassist.pf.core.api.model.*
 import ru.finassist.pf.core.common.error.*
 import ru.finassist.pf.core.common.time.ElapsedClock
 import ru.finassist.pf.mock.api.MockAssistantApi
+import ru.finassist.pf.mock.api.MockAuthApi
 import ru.finassist.pf.mock.api.MockOperationsApi
 import ru.finassist.pf.mock.api.MockProfileApi
 import kotlin.test.*
@@ -79,6 +80,40 @@ class MockErrorCatalogTest {
             val profile = MockProfileApi(backend).updateProfile(ProfileUpdate(theme = Theme.DARK))
             assertEquals(Theme.DARK, profile.theme)
             assertEquals(0, backend.injectedErrorCount.value)
+        } finally { backend.scope.cancel() }
+    }
+
+    @Test fun `phone Start rate limit fixture applies only to Start and uses Retry-After alone`() = runBlocking<Unit> {
+        val backend = testBackend(config = FAST.copy(
+            errorOperation = MockErrorOperation.PROFILE_UPDATE,
+            errorScenario = MockErrorScenario.PHONE_START_RATE_LIMITED,
+        ))
+        try {
+            val profile = MockProfileApi(backend).updateProfile(ProfileUpdate(theme = Theme.DARK))
+            assertEquals(Theme.DARK, profile.theme)
+            assertEquals(0, backend.injectedErrorCount.value)
+
+            backend.config = backend.config.copy(errorOperation = MockErrorOperation.PHONE_START)
+            val version = MockBackend.CONSENT_VERSION_PD
+            val error = assertFailsWith<AppError.RateLimited> {
+                MockAuthApi(backend).startPhoneVerification(
+                    IdempotencyKey("phone-start"),
+                    StartPhoneVerificationRequest("+79161234567", true, version, true),
+                )
+            }
+            val response = assertNotNull(error.response)
+            assertEquals(429, response.httpStatus)
+            assertEquals(ErrorCodes.RATE_LIMITED, response.code)
+            assertEquals(30L, error.retryAfterSeconds)
+            assertEquals(30L, response.retryAfterSeconds)
+            assertNull(error.retryAt)
+            assertNull(response.retryAt)
+            assertEquals(false, error.requestRetryable)
+            assertEquals(MockErrorCatalog.presentation(ErrorCodes.RATE_LIMITED), error.presentation)
+            assertEquals(1, backend.injectedErrorCount.value)
+            val evidence = backend.consents.snapshot()
+            assertEquals(listOf(version), evidence.startVersions)
+            assertEquals(1, evidence.startKeyCount)
         } finally { backend.scope.cancel() }
     }
 

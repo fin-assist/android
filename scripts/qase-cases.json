@@ -31,6 +31,7 @@
     ".maestro/flows/assistant/about.yaml": 100,
     "ru.finassist.pf.AssistantAboutDocumentTest#opensCurrentDocumentOnlyAfterATapAndRecoversFromAnOfflineRead": 100,
     ".maestro/flows/assistant/ask_question.yaml": 12,
+    "ru.finassist.pf.AssistantComposerKeyboardTest#requestsSentenceCapitalizationAndSendsTheTypedCase": 12,
     ".maestro/flows/assistant/daily_limit.yaml": 13,
     ".maestro/flows/statements/upload_and_history.yaml": 14,
     "ru.finassist.pf.StatementPickerTest#opensPrivacyPolicyFromUploadNotice": 14,
@@ -72,6 +73,7 @@
     ".maestro/flows/auth/phone_confirmation_gates.yaml": 57,
     ".maestro/flows/auth/phone_consent_recovery.yaml": 58,
     ".maestro/flows/auth/phone_retry_after_refusal.yaml": 59,
+    ".maestro/flows/auth/phone_retry_countdown.yaml": 105,
     ".maestro/flows/assistant/tab_and_consent_recovery.yaml": 61,
     ".maestro/flows/analytics/import_preparation_retry.yaml": 63,
     ".maestro/flows/analytics/recalculation_snapshot.yaml": 82,
@@ -107,6 +109,8 @@
     "jvm:ru.finassist.pf.feature.analytics.impl.ui.AnalyticsReliabilityComponentTest#qase82RetainedSnapshotsAndRefusedMutation": 82,
     "jvm:ru.finassist.pf.feature.analytics.impl.ui.AnalyticsReliabilityComponentTest#qase83HistoryPagingAndSelection": 83,
     "jvm:ru.finassist.pf.feature.analytics.impl.ui.AnalyticsReliabilityComponentTest#qase89UnknownReadRecoveryAndDeferredSelection": 89,
-    "jvm:ru.finassist.pf.feature.analytics.impl.ui.AnalyticsReliabilityComponentTest#qase73PeriodRetryAndDeferredRefusal": 73
+    "jvm:ru.finassist.pf.feature.analytics.impl.ui.AnalyticsReliabilityComponentTest#qase73PeriodRetryAndDeferredRefusal": 73,
+    "ru.finassist.pf.AssistantAboutDocumentTest#chatUsesOneBottomInsetWithAndWithoutTabs": 103,
+    "ru.finassist.pf.CallSupportTest#opensSupportDraftWhileWaitingAndAfterExpiry": 104
   }
 }

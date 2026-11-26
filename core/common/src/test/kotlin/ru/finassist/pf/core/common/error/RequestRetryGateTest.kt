@@ -70,15 +70,15 @@ class RequestRetryGateTest {
             requestRetryable = false, context = ErrorContext.RESULT_EVENT)))
         assertTrue(gate.isReady())
     }
-    @Test fun `wait readiness ticks for a forbidden original without granting original replay`() = runTest {
+    @Test fun `remaining wait ticks for a forbidden original without granting original replay`() = runTest {
         val gate = RequestRetryGate(ElapsedClock { testScheduler.currentTime })
-        gate.record(AppError.RateLimited(null, 1, ErrorResponseInfo("RATE_LIMITED", 429,
-            requestRetryable = false, retryAfterSeconds = 1, timing = ResponseTiming(receivedElapsedMillis = 0))))
-        val updates = async { gate.waitReadiness.take(2).toList() }
-        runCurrent(); advanceTimeBy(999); runCurrent()
+        gate.record(AppError.RateLimited(null, 2, ErrorResponseInfo("RATE_LIMITED", 429,
+            requestRetryable = false, retryAfterSeconds = 2, timing = ResponseTiming(receivedElapsedMillis = 0))))
+        val updates = async { gate.remainingWait.take(3).toList() }
+        runCurrent(); advanceTimeBy(1999); runCurrent()
         assertEquals(1L, gate.remainingMillis()); assertFalse(gate.isReady())
         advanceTimeBy(1); runCurrent()
-        assertEquals(listOf(false, true), updates.await())
+        assertEquals(listOf(2000L, 1000L, 0L), updates.await())
         assertFalse(gate.isReady()); assertTrue(gate.isExplicitlyForbidden())
     }
 
