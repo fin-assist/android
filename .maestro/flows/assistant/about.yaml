@@ -33,7 +33,7 @@ tags:
     direction: DOWN
 - scrollUntilVisible:
     element:
-      id: "assistant.about.document"
+      text: "Как помощник использует данные"
     direction: DOWN
 - assertVisible: "Как помощник использует данные"
 - tapOn:
