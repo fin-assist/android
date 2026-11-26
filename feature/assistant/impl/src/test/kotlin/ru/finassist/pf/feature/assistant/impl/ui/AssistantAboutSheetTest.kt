@@ -52,10 +52,15 @@ class AssistantAboutSheetTest {
 
         compose.onNodeWithTag("assistant.about.open").assertIsDisplayed().performClick()
         compose.onNodeWithText("Что можно спросить").assertIsDisplayed()
+        compose.onNodeWithText("по загруженным банковским данным", substring = true).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("«Как составить личный бюджет?»").performScrollTo().assertIsDisplayed()
         compose.onNodeWithTag("assistant.about.limit").performScrollTo().assertIsDisplayed()
         val rules = compose.onNodeWithTag("assistant.about.rules")
         rules.performScrollTo().assertIsDisplayed().performClick()
-        compose.onNodeWithText("Повторяющиеся вопросы вне темы", substring = true).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("вопрос не засчитывается в суточный лимит", substring = true)
+            .performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("не исчерпали суточный лимит вопросов", substring = true).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("из загруженных банковских данных", substring = true).performScrollTo().assertIsDisplayed()
         compose.onNodeWithTag("assistant.about.document").performScrollTo().assertIsDisplayed()
         compose.onNodeWithTag("ds.sheet.close").assertIsDisplayed().performClick()
         compose.onNodeWithTag("assistant.about.sheet").assertDoesNotExist()
@@ -87,7 +92,9 @@ class AssistantAboutSheetTest {
             }
             compose.onNodeWithTag("assistant.about.sheet").assertIsDisplayed()
             compose.onNodeWithTag("assistant.about.rules").performScrollTo().performClick()
-            val rules = compose.onNodeWithText("Повторяющиеся вопросы вне темы", substring = true)
+            compose.onNodeWithText("по загруженным банковским данным", substring = true).performScrollTo().assertIsDisplayed()
+            compose.onNodeWithText("из загруженных банковских данных", substring = true).performScrollTo().assertIsDisplayed()
+            val rules = compose.onNodeWithText("Если часто задавать вопросы вне темы", substring = true)
             rules.performScrollTo().assertIsDisplayed()
 
             compose.runOnIdle { restoring = true }

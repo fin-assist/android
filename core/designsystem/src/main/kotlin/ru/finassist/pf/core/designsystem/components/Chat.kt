@@ -35,6 +35,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -221,7 +222,10 @@ fun PfChatComposer(
                             maxLines = 4,
                             textStyle = PfTheme.type.lead.copy(color = if (idle) c.text else c.textMuted, fontSize = 16.sp),
                             cursorBrush = SolidColor(c.accent),
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                            keyboardOptions = KeyboardOptions(
+                                capitalization = KeyboardCapitalization.Sentences,
+                                imeAction = ImeAction.Send,
+                            ),
                             keyboardActions = KeyboardActions(onSend = { if (idle && sendEnabled) onSend() }),
                             modifier = Modifier
                                 .weight(1f)
