@@ -41,14 +41,14 @@ tags:
       text: "Повторить можно через 0:0[1-9]"
     timeout: 33000
 - extendedWaitUntil:
-    visible:
-      id: "auth.phone.submit"
-      containsChild:
-        text: "Повторить"
-      enabled: true
+    notVisible:
+      id: "auth.phone.retryWait"
     timeout: 15000
-- assertNotVisible:
-    id: "auth.phone.retryWait"
+- assertVisible:
+    id: "auth.phone.submit"
+    containsChild:
+      text: "Повторить"
+    enabled: true
 - assertNotVisible:
     id: "auth.call"
 - runFlow:
