@@ -23,6 +23,7 @@ object E2eModule {
         networkDelayMs = 50,
         importStepDelayMs = 300,
         assistantChunkDelayMs = 5,
+        assistantBudgetGuide = true,
         statementAssets = listOf(MockConfig.FIXTURE_STATEMENT),
     )
 }

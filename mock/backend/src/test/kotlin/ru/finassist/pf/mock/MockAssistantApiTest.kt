@@ -107,6 +107,23 @@ class MockAssistantApiTest {
     }
 
     @Test
+    fun `the budget guide fixture preserves line breaks in the stream and history`() = runBlocking<Unit> {
+        val question = "How do I make a budget?"
+        val ordinary = ask(question, k = "ordinary-budget-question")
+        assertEquals(AnswerErrorCode.CANNOT_ANSWER, assertIs<AnswerEvent.Error>(finish(ordinary.answerId).last()).event.code)
+
+        backend.config = backend.config.copy(assistantBudgetGuide = true)
+        val fixture = ask(question, k = "budget-guide-fixture")
+        val snapshot = finalSnapshot(fixture.answerId)
+        val expected = "Чтобы составить бюджет:\n\n" +
+            "1. **Посчитайте доходы.** Сложите все поступления.\n" +
+            "2. **Запишите расходы.** Разделите их на обязательные и остальные."
+        assertEquals(AnswerStatus.COMPLETE, snapshot.status)
+        assertEquals(expected, snapshot.blocks.single().text)
+        assertEquals(expected, api.listMessages().messages.last().blocks!!.single().text)
+    }
+
+    @Test
     fun `a question the data cannot answer fails with CANNOT_ANSWER and is refunded`() = runBlocking<Unit> {
         val response = ask("Сколько я потрачу в следующем году?")
         // The response counts the question; the refund comes with the terminal event.

@@ -38,6 +38,40 @@ class AnswerFormatTest {
     }
 
     @Test
+    fun `numbered lines keep their original numbers and bold headings`() {
+        val source = "Чтобы составить бюджет:\n\n1. **Доходы.** Учтите зарплату.\n" +
+            "2. **Расходы.** Распределите траты.\nУчтите обязательные платежи.\n10. **План.**"
+        val chunks = listOf(source.substringBefore("2. "), "2.", source.substringAfter("2. ").let { " $it" })
+        val streamed = chunks.fold(emptyList<Block>()) { blocks, chunk -> ChatViewModel.appendChunk(blocks, 0, chunk) }
+        val expected = listOf(
+            TextPart.Paragraph(listOf(TextPart.Span("Чтобы составить бюджет:", bold = false))),
+            TextPart.Paragraph(listOf(
+                TextPart.Span("1. ", bold = false),
+                TextPart.Span("Доходы.", bold = true),
+                TextPart.Span(" Учтите зарплату.\n2. ", bold = false),
+                TextPart.Span("Расходы.", bold = true),
+                TextPart.Span(" Распределите траты. Учтите обязательные платежи.\n10. ", bold = false),
+                TextPart.Span("План.", bold = true),
+            )),
+        )
+
+        assertEquals(expected, AnswerFormat.parse(Block.text(source).text!!))
+        assertEquals(expected, AnswerFormat.parse(streamed.single().text!!))
+    }
+
+    @Test
+    fun `numbered lines do not split inline numbers or decimal amounts`() {
+        val parts = AnswerFormat.parse("Варианты 1. Доходы и 2. Расходы.\n2026.11.26 — перевод на 12.50 ₽.")
+        assertEquals(
+            listOf(TextPart.Paragraph(listOf(TextPart.Span(
+                "Варианты 1. Доходы и 2. Расходы. 2026.11.26 — перевод на 12.50 ₽.",
+                bold = false,
+            )))),
+            parts,
+        )
+    }
+
+    @Test
     fun `source line and changed since`() {
         val s = AnswerSource(
             calculatedAt = t("2026-09-25T19:11:00+03:00"),

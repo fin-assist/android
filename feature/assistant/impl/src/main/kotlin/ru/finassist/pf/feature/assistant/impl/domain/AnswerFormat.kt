@@ -27,6 +27,8 @@ sealed interface TextPart {
 
 object AnswerFormat {
 
+    private val numberedLineStart = Regex("""^[0-9]+\.[ \t]""")
+
     /** Everything outside the subset is kept as plain text (an unmatched `**` stays literal). */
     fun parse(text: String): List<TextPart> {
         val parts = mutableListOf<TextPart>()
@@ -36,16 +38,17 @@ object AnswerFormat {
             paragraph.clear()
         }
         text.lines().forEach { raw ->
-            val line = raw.trimEnd()
+            val line = raw.trim()
             when {
-                line.isBlank() -> flush()
-                line.trimStart().startsWith("- ") -> {
+                line.isEmpty() -> flush()
+                line.startsWith("- ") -> {
                     flush()
-                    parts += TextPart.Bullet(spans(line.trimStart().removePrefix("- ").trim()))
+                    parts += TextPart.Bullet(spans(line.removePrefix("- ").trim()))
                 }
                 else -> {
-                    if (paragraph.isNotEmpty()) paragraph.append(' ')
-                    paragraph.append(line.trim())
+                    // The number marker stays literal. Keep its source line break while joining soft wraps.
+                    if (paragraph.isNotEmpty()) paragraph.append(if (numberedLineStart.containsMatchIn(line)) '\n' else ' ')
+                    paragraph.append(line)
                 }
             }
         }
