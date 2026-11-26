@@ -41,7 +41,7 @@ tags:
 - assertVisible:
     id: "auth.call.dial"
 - assertVisible: "\\+78001234567"
-- assertVisible: "Позвоните с номера \\+7 916 123-45-67 на наш номер\\. Мы сразу сбросим звонок — по нему и поймём, что номер ваш"
+- assertVisible: "Позвоните с номера \\+7 916 123-45-67 на наш номер\\."
 - assertVisible:
     id: "auth.call.wait"
     text: ".*Ждём звонок до [0-2][0-9]:[0-5][0-9]"

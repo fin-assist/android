@@ -202,12 +202,14 @@ internal fun AnalyticsContent(
                     PfEmptyState(PfIcons.BAR_CHART, "Обновляем аналитику", "Подготавливаем показатели по вашим выпискам")
                 }
                 state.errorPresentation != null && a == null -> Unit
-                state.offline -> ConnectionFailureState(modifier = Modifier.testTag(AnalyticsTags.OFFLINE)) {
+                state.offline -> ConnectionFailureState(
+                    modifier = Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).testTag(AnalyticsTags.OFFLINE),
+                ) {
                     PfButton("Повторить", onClick = { vm.refresh() }, variant = ButtonVariant.PRIMARY, modifier = Modifier.testTag(AnalyticsTags.RETRY))
                 }
                 state.preparationTimedOut -> PfEmptyState(
                     PfIcons.BAR_CHART, "Аналитика ещё готовится",
-                    modifier = Modifier.testTag(AnalyticsTags.PREPARATION_TIMEOUT),
+                    modifier = Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).testTag(AnalyticsTags.PREPARATION_TIMEOUT),
                 ) {
                     PfButton("Повторить", onClick = { vm.refresh() }, enabled = state.retryReady,
                         variant = ButtonVariant.PRIMARY, modifier = Modifier.testTag(AnalyticsTags.RETRY))

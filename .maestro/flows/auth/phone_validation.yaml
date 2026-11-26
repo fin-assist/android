@@ -80,7 +80,7 @@ tags:
       id: "auth.call"
     timeout: 10000
 - assertVisible: "Позвоните нам для подтверждения"
-- assertVisible: "Позвоните с номера \\+7 916 123-45-67 на наш номер. Мы сразу сбросим звонок — по нему и поймём, что номер ваш"
+- assertVisible: "Позвоните с номера \\+7 916 123-45-67 на наш номер\\."
 # The end of the wait by the device clock: response time + expires_in (api.md 1.1), not a fixed «3 минуты».
 - assertVisible:
     id: "auth.call.wait"

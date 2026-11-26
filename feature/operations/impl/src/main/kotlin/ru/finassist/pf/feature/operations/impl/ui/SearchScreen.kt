@@ -130,7 +130,7 @@ internal fun SearchContent(
                     .fillMaxWidth()
                     .background(PfTheme.colors.nav)
                     .windowInsetsPadding(PfInsets.statusBars)
-                    .padding(start = d.space3, end = d.space5, top = d.space2),
+                    .padding(start = d.space3, end = d.space5, top = d.space2, bottom = d.space2),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(d.space1),
             ) {

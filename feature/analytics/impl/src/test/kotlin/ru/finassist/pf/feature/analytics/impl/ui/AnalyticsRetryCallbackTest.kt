@@ -60,12 +60,16 @@ class AnalyticsRetryCallbackTest {
         }
     }
 
-    @Test fun `fullscreen offline retry refreshes the shown context`() = assertFullscreenRetry(
+    @Test
+    @Config(qualifiers = "w320dp-h400dp-mdpi")
+    fun `fullscreen offline retry refreshes the shown context`() = assertFullscreenRetry(
         AnalyticsUiState(loading = false, offline = true, blocks = AnalyticsBlocks(),
             periodChangeErrorPresentation = ErrorPresentation(), periodChangeRetryReady = false),
     )
 
-    @Test fun `fullscreen preparation timeout retry refreshes the shown context`() = assertFullscreenRetry(
+    @Test
+    @Config(qualifiers = "w320dp-h400dp-mdpi")
+    fun `fullscreen preparation timeout retry refreshes the shown context`() = assertFullscreenRetry(
         AnalyticsUiState(loading = false, preparationTimedOut = true, blocks = AnalyticsBlocks(),
             periodChangeErrorPresentation = ErrorPresentation(), periodChangeRetryReady = false),
     )
@@ -79,7 +83,7 @@ class AnalyticsRetryCallbackTest {
                 }
             }
         }
-        compose.onNodeWithTag(AnalyticsTags.RETRY).performClick()
+        compose.onNodeWithTag(AnalyticsTags.RETRY).performScrollTo().assertIsDisplayed().performClick()
         compose.runOnIdle {
             assertEquals(1, handlers.refreshes)
             assertEquals(0, handlers.loads)
