@@ -15,6 +15,8 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.printToLog
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.test.espresso.intent.Intents
 import androidx.test.espresso.intent.Intents.intending
 import androidx.test.espresso.intent.matcher.IntentMatchers.hasAction
@@ -29,7 +31,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import ru.finassist.pf.e2e.E2eControlActivity
 
-/** The Qase100 companion covers the Android browser handoff; Maestro checks the rest of the sheet. */
+/** Device checks for the Assistant's Android browser handoff and system navigation insets. */
 @RunWith(AndroidJUnit4::class)
 class AssistantAboutDocumentTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
@@ -40,6 +42,36 @@ class AssistantAboutDocumentTest {
     }
 
     @After fun tearDown() = Intents.release()
+
+    @Test fun chatUsesOneBottomInsetWithAndWithoutTabs() {
+        signInWithFixture()
+        compose.onNodeWithTag("ds.tab.assistant").performClick()
+        compose.waitUntil(15_000) { hasTag("ds.sheet.close") }
+        compose.onNodeWithTag("ds.sheet.close").performClick()
+        compose.waitUntil(15_000) { hasTag("ds.chat.input") && !hasTag("ds.sheet.close") }
+
+        val tab = compose.onNodeWithTag("ds.tab.assistant").fetchSemanticsNode().boundsInRoot
+        val tabGap = tab.top - disclaimerBottom()
+        val maxGap = 11 * compose.density.density
+        assertTrue("The disclaimer-to-tab gap was $tabGap px", tabGap in 0f..maxGap)
+
+        compose.onNodeWithTag("ds.tab.profile").performClick()
+        compose.waitUntil(15_000) { hasTag("profile.assistant") }
+        compose.onNodeWithTag("profile.assistant").performScrollTo().performClick()
+        compose.waitUntil(15_000) { hasTag("ds.chat.input") }
+        compose.onNodeWithTag("ds.tab.assistant").assertDoesNotExist()
+        val navigationBottom = requireNotNull(windowInsets()).getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
+        assertTrue("This test requires a nonzero system navigation inset", navigationBottom > 0)
+        val detailGap = compose.onRoot().fetchSemanticsNode().boundsInRoot.bottom - disclaimerBottom()
+        assertTrue("The detail chat's disclaimer-to-window gap was $detailGap px", detailGap in navigationBottom.toFloat()..navigationBottom + maxGap)
+    }
+
+    private fun disclaimerBottom() = compose.onNodeWithText("Помощник может ошибаться — сверяйте цифры с операциями")
+        .assertIsDisplayed().fetchSemanticsNode().boundsInRoot.bottom
+
+    private fun windowInsets() = compose.runOnUiThread {
+        ViewCompat.getRootWindowInsets(compose.activity.window.decorView)
+    }
 
     @Test fun opensCurrentDocumentOnlyAfterATapAndRecoversFromAnOfflineRead() {
         signInWithFixture()
