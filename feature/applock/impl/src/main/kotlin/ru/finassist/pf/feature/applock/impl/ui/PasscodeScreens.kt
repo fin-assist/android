@@ -57,7 +57,7 @@ import ru.finassist.pf.feature.applock.api.PASSCODE_LENGTH
 /**
  * Common layout of all passcode screens (mockups `Passcode*`, `PasscodeLogin*`, `DeleteAccount*`): optional
  * header, then from the top — the app mark (unlock) or the lock hero (first run), title, subtitle 4 dp below, dots
- * 32 dp below; the keypad at the bottom with an optional footer link under it. Short bodies use smaller
+ * 32 dp below with the gap split across the introduction and the keypad area. Short bodies use smaller
  * gaps and keys of at least 56 dp, also fitting the digit line height. The introduction automatically reveals
  * the dots and error after layout changes; the keypad stays put.
  *
@@ -106,6 +106,7 @@ private fun PasscodePad(
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
             // 720 dp minus the standard 24 dp bars; actual insets/header are already excluded here.
             val compact = maxHeight < 672.dp
+            val introductionGap = if (compact) d.space2 else d.space4
             Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
                 Spacer(Modifier.fillMaxWidth().height(if (compact) d.space2 else d.space6).background(introductionBackground))
                 Column(
@@ -114,7 +115,8 @@ private fun PasscodePad(
                 ) {
                     val textAlign = if (alignStart) TextAlign.Start else TextAlign.Center
                     Column(
-                        Modifier.fillMaxWidth().background(introductionBackground).padding(horizontal = d.space5),
+                        Modifier.fillMaxWidth().background(introductionBackground)
+                            .padding(start = d.space5, end = d.space5, bottom = introductionGap),
                         horizontalAlignment = if (alignStart) Alignment.Start else Alignment.CenterHorizontally,
                     ) {
                         if (mark) {
@@ -131,7 +133,7 @@ private fun PasscodePad(
                             Text(subtitle, style = PfTheme.type.lead, color = PfTheme.colors.textMuted, textAlign = textAlign)
                         }
                     }
-                    Spacer(Modifier.height(if (compact) d.space4 else d.space8))
+                    Spacer(Modifier.height(introductionGap))
                     Box(Modifier.padding(horizontal = d.space5)) {
                         PfPasscodeDots(filled = entered, length = PASSCODE_LENGTH, error = error)
                     }
@@ -210,9 +212,10 @@ private fun BiometricOffer(icon: String, onEnable: () -> Unit, onSkip: () -> Uni
             .windowInsetsPadding(PfInsets.statusBars)
             .background(c.bg)
             .windowInsetsPadding(PfInsets.navigationBars)
+            .verticalScroll(rememberScrollState())
             .padding(bottom = d.space4),
     ) {
-        Column(Modifier.fillMaxWidth().background(c.nav).then(screenMargin).padding(top = d.space6)) {
+        Column(Modifier.fillMaxWidth().background(c.nav).then(screenMargin).padding(top = d.space6, bottom = d.space4)) {
             PfStatusHero(tone = HeroTone.INFO, icon = icon, centered = false)
             Spacer(Modifier.height(d.space4))
             Text("Входить по биометрии?", style = PfTheme.type.title1, color = c.text)

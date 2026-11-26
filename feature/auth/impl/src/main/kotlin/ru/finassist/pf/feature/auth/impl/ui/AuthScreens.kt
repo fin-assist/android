@@ -7,6 +7,7 @@ import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -73,7 +74,7 @@ import ru.finassist.pf.feature.auth.impl.domain.PhoneFormat
 private fun AuthScaffold(
     tag: String,
     hasTopHeader: Boolean = false,
-    content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
+    content: @Composable ColumnScope.() -> Unit,
 ) {
     val d = PfTheme.dimens
     val c = PfTheme.colors
@@ -91,6 +92,14 @@ private fun AuthScaffold(
             .then(if (hasTopHeader) Modifier else Modifier.padding(start = d.space5, end = d.space5, top = d.space6)),
         content = content,
     )
+}
+
+@Composable
+private fun ColumnScope.CenteredAuthHeader(content: @Composable ColumnScope.() -> Unit) {
+    // Give extra space to the gaps so a short viewport can scroll the header at its natural height.
+    Spacer(Modifier.weight(1f))
+    Column(Modifier.padding(vertical = PfTheme.dimens.space4), content = content)
+    Spacer(Modifier.weight(1f))
 }
 
 @Composable
@@ -128,7 +137,7 @@ internal fun PhoneContent(
     onOpenDocument: (String) -> Unit = {},
 ) {
     AuthScaffold(AuthTags.PHONE) {
-        Column(Modifier.weight(1f).padding(vertical = PfTheme.dimens.space6), verticalArrangement = Arrangement.Center) {
+        CenteredAuthHeader {
             PfMark(size = PfTheme.dimens.mark)
             Spacer(Modifier.height(PfTheme.dimens.space4))
             Text("Понятные финансы", style = PfTheme.type.title1, color = PfTheme.colors.text)
@@ -183,7 +192,7 @@ internal fun PhoneContent(
 @Composable
 internal fun DeletedScreen(onDone: () -> Unit) {
     AuthScaffold(AuthTags.DELETED) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
+        CenteredAuthHeader {
             PfStatusHero(tone = HeroTone.POSITIVE, centered = false)
             Spacer(Modifier.height(PfTheme.dimens.space5))
             Text("Аккаунт удалён", style = PfTheme.type.title1, color = PfTheme.colors.text)
@@ -239,12 +248,12 @@ internal fun CallContent(
     val c = PfTheme.colors
     val screenMargin = Modifier.padding(horizontal = d.space5)
     AuthScaffold(AuthTags.CALL, hasTopHeader = true) {
-        Column(Modifier.fillMaxWidth().background(c.nav).then(screenMargin).padding(top = d.space6)) {
+        Column(Modifier.fillMaxWidth().background(c.nav).then(screenMargin).padding(top = d.space6, bottom = d.space4)) {
             PfStatusHero(tone = HeroTone.INFO, icon = PfIcons.PHONE, centered = false)
             Spacer(Modifier.height(d.space4))
             Text("Позвоните нам для подтверждения", style = PfTheme.type.title1, color = c.text)
             Text(
-                "Позвоните с номера ${state.phoneDisplay} на наш номер. Мы сразу сбросим звонок — по нему и поймём, что номер ваш",
+                "Позвоните с номера ${state.phoneDisplay} на наш номер.",
                 style = PfTheme.type.lead, color = c.textMuted, modifier = Modifier.padding(top = d.space1),
             )
         }
@@ -253,6 +262,12 @@ internal fun CallContent(
             PfCard(modifier = screenMargin) {
                 Text("Номер для звонка", style = PfTheme.type.caption, color = PfTheme.colors.textMuted)
                 Text(state.callbackNumber, style = PfTheme.type.amountLg, color = PfTheme.colors.text, modifier = Modifier.padding(top = PfTheme.dimens.space1))
+                Text(
+                    "За звонок может взиматься плата в соответствии с тарифом вашего оператора.",
+                    style = PfTheme.type.caption,
+                    color = c.textMuted,
+                    modifier = Modifier.padding(top = d.space2),
+                )
                 Spacer(Modifier.height(PfTheme.dimens.space4))
                 PfButton(
                     "Позвонить", icon = PfIcons.PHONE, variant = ButtonVariant.PRIMARY, block = true,
@@ -262,7 +277,7 @@ internal fun CallContent(
             }
         }
         Spacer(Modifier.height(PfTheme.dimens.space4))
-        Column(Modifier.weight(1f).then(screenMargin), verticalArrangement = Arrangement.spacedBy(d.space4)) {
+        Column(screenMargin, verticalArrangement = Arrangement.spacedBy(d.space4)) {
             when (state.phase) {
                 CallPhase.WAITING -> {
                     if (state.confirmingNumber) {
@@ -438,7 +453,7 @@ internal fun ConsentContent(
 @Composable
 fun RegistrationClosedScreen(onBack: () -> Unit) {
     AuthScaffold(AuthTags.CLOSED) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
+        CenteredAuthHeader {
             PfStatusHero(tone = HeroTone.INFO, icon = PfIcons.LOCK, centered = false)
             Spacer(Modifier.height(PfTheme.dimens.space4))
             Text("Регистрация пока закрыта", style = PfTheme.type.title1, color = PfTheme.colors.text)
