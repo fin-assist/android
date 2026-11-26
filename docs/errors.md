@@ -190,10 +190,10 @@ after any captured server wait. The form keeps the number, 14+ and acceptance of
 version. A rejected or changed version requires consent again. The backend enforces its phone fence.
 
 FIN-593: the Phone screen shows the remaining wait next to the primary button for the action it will
-retry, independently of the error message. The countdown rounds up to seconds and uses the same
-captured deadline as the request gate. At zero the countdown disappears and the action can become
-enabled. Resending requires an explicit action. An unanchored wait keeps the action disabled
-and shows the server target when one is available, without a countdown.
+retry, independently of the error message. The countdown rounds up to seconds, shows hours for waits
+of an hour or longer, and uses the same captured deadline as the request gate. At zero the countdown
+disappears and the action can become enabled. Resending requires an explicit action. An unanchored
+wait keeps the action disabled and shows the server target when one is available, without a countdown.
 
 FIN-397: a different history `before_id` is a new request input. `RequestRetryGate.clearOriginalRefusal()`
 ends the old input's explicit refusal without changing the captured endpoint deadline, including an

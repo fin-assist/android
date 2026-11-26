@@ -22,11 +22,10 @@ import ru.finassist.pf.core.common.error.AppError
 import ru.finassist.pf.core.common.time.Clock
 import ru.finassist.pf.core.tracking.Events
 import ru.finassist.pf.core.tracking.Tracker
-import ru.finassist.pf.feature.auth.impl.domain.CallDeadline
 import ru.finassist.pf.feature.auth.impl.domain.PhoneFormat
+import ru.finassist.pf.feature.auth.impl.domain.RetryWaitTexts
 import ru.finassist.pf.feature.auth.impl.domain.SignInFlow
 import java.time.OffsetDateTime
-import java.util.Locale
 import javax.inject.Inject
 
 data class PhoneUiState(
@@ -100,8 +99,8 @@ class PhoneViewModel @Inject constructor(
                     it.replayUnavailable || hasExpiredStartKey(PhoneFormat.toE164(it.digits)),
                 documentRefreshReady = documentWait == 0L,
                 documentRefreshRequired = needsDocument,
-                retryWaitText = if (needsDocument) retryWaitText(documentWait, documentRetryAt)
-                    else retryWaitText(startWait, waiting?.retryAt),
+                retryWaitText = if (needsDocument) RetryWaitTexts.of(documentWait, documentRetryAt, clock.zone)
+                    else RetryWaitTexts.of(startWait, waiting?.retryAt, clock.zone),
                 error = if (waiting != null) RATE_LIMIT_TEXT else it.error,
                 errorPresentation = waiting?.presentation ?: it.errorPresentation,
             )
@@ -266,16 +265,6 @@ class PhoneViewModel @Inject constructor(
     }
 
     fun consumeEvent() { _events.value = null }
-
-    private fun retryWaitText(remainingMillis: Long?, retryAt: OffsetDateTime?): String? = when (remainingMillis) {
-        0L -> null
-        null -> retryAt?.let { "Время повтора по данным сервера — ${CallDeadline.clockText(it.toInstant(), clock.zone)}" }
-            ?: "Точное время ожидания неизвестно"
-        else -> {
-            val seconds = (remainingMillis - 1L) / 1000L + 1L
-            "Повторить можно через %d:%02d".format(Locale.ROOT, seconds / 60L, seconds % 60L)
-        }
-    }
 
     private fun errorText(e: AppError): String = when (e) {
         is AppError.Offline -> "Не получилось отправить номер"
