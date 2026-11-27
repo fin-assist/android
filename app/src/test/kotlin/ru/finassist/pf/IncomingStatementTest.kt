@@ -9,11 +9,12 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import ru.finassist.pf.feature.auth.api.SessionState
+import ru.finassist.pf.feature.statements.impl.ui.StatementFile
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], application = Application::class)
 class IncomingStatementTest {
-    private val file = Uri.parse("content://example.test/statement.ofx")
+    private val file = StatementFile(Uri.parse("content://media/external/downloads/23"), validateDownload = true)
     private val session = SessionState.SignedIn("user", "first-session")
 
     @Test fun `keeps the selection until sign-in then delivers it once`() {
@@ -52,7 +53,7 @@ class IncomingStatementTest {
         incoming.offer(file)
         assertEquals(request, incoming.id)
 
-        val replacement = Uri.parse("content://example.test/replacement.ofx")
+        val replacement = StatementFile(Uri.parse("content://example.test/replacement.ofx"))
         incoming.offer(replacement)
 
         assertNull(incoming.consume(request, session))

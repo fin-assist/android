@@ -95,6 +95,6 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun acceptIncomingStatement(intent: Intent) {
-        incomingStatementUri(intent)?.let(incomingStatement::offer)
+        incomingStatementFile(intent)?.let(incomingStatement::offer)
     }
 }

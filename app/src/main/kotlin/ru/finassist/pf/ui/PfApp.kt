@@ -1,6 +1,5 @@
 package ru.finassist.pf.ui
 
-import android.net.Uri
 import androidx.compose.runtime.key
 import ru.finassist.pf.core.common.availability.ServiceGate
 import ru.finassist.pf.feature.availability.impl.ui.AvailabilityScreens
@@ -60,6 +59,7 @@ import ru.finassist.pf.feature.profile.api.ProfileRoutes
 import ru.finassist.pf.feature.statements.api.StatementsRoutes
 import ru.finassist.pf.feature.statements.impl.ui.ExternalStatementSelection
 import ru.finassist.pf.feature.statements.impl.ui.LocalExternalStatementSelection
+import ru.finassist.pf.feature.statements.impl.ui.StatementFile
 
 /**
  * Root of the UI. Three layers chosen by state, not by navigation:
@@ -129,7 +129,7 @@ internal fun PfApp(
                                     }
                                 else -> {
                                     val locked = lockState == LockState.Locked
-                                    val statementSelection: ((String) -> Uri?)? =
+                                    val statementSelection: ((String) -> StatementFile?)? =
                                         if (!locked && !blocked) {
                                             { id ->
                                                 if (appLock.state.value == LockState.Unlocked &&
@@ -239,7 +239,7 @@ private fun MainLayer(
     onScreenOpened: (String?) -> Unit,
     active: Boolean,
     incomingStatementId: String?,
-    consumeIncomingStatement: ((String) -> Uri?)?,
+    consumeIncomingStatement: ((String) -> StatementFile?)?,
     modifier: Modifier = Modifier,
 ) {
     val controller = rememberNavController()

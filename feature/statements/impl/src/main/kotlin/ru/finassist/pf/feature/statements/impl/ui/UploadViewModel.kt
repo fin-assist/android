@@ -45,6 +45,7 @@ import ru.finassist.pf.feature.statements.impl.data.StatementsRepositoryImpl
 import java.time.LocalDate
 import ru.finassist.pf.core.common.time.SourceTimeZone
 import ru.finassist.pf.feature.statements.impl.domain.DownloadPeriod
+import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.security.MessageDigest
@@ -139,9 +140,9 @@ class UploadViewModel @Inject constructor(
     private var heldComplete: Pair<String, ImportEvent.Complete>? = null
 
     /** The last picked file: «Повторить» after a network failure sends it again. */
-    private var lastPicked: Uri? = null
-    private var lastInspected: Pair<Uri, PickedFile>? = null
-    private data class PendingUploadRecovery(val action: String, val uri: Uri, val key: IdempotencyKey)
+    private var lastPicked: StatementFile? = null
+    private var lastInspected: Pair<StatementFile, PickedFile>? = null
+    private data class PendingUploadRecovery(val action: String, val source: StatementFile, val key: IdempotencyKey)
     private var pendingUploadRecovery: PendingUploadRecovery? = null
 
     init {
@@ -246,7 +247,7 @@ class UploadViewModel @Inject constructor(
     }
 
     fun onFilePicked(uri: Uri?) {
-        if (uri != null && canStartPickedFile(_state.value)) launchUpload(uri)
+        if (uri != null && canStartPickedFile(_state.value)) launchUpload(StatementFile(uri))
         // Keep the picker priority until its selected file has started, or selection was cancelled.
         _state.update { it.copy(awaitingFilePicker = false) }
     }
@@ -255,7 +256,7 @@ class UploadViewModel @Inject constructor(
         !uploadInFlight && state.phase !is UploadPhase.Busy && state.doneUploadId == null
 
     /** Wait for a verified guide without replacing the current upload, its result or its retry. */
-    suspend fun onExternalFilePicked(takeSelection: () -> Uri?) {
+    suspend fun onExternalFilePicked(takeSelection: () -> StatementFile?) {
         while (true) {
             state.first { it.phase == UploadPhase.Disabled || canTakeExternalFile(it) }
             // The previous pick may still be inspecting its URI before it enters Busy.
@@ -264,15 +265,15 @@ class UploadViewModel @Inject constructor(
             if (current.phase == UploadPhase.Disabled) return
             if (canTakeExternalFile(current) && !uploadInFlight) break
         }
-        val uri = takeSelection() ?: return
+        val source = takeSelection() ?: return
         val readPermission = context.checkUriPermission(
-            uri, Process.myPid(), Process.myUid(), Intent.FLAG_GRANT_READ_URI_PERMISSION,
+            source.uri, Process.myPid(), Process.myUid(), Intent.FLAG_GRANT_READ_URI_PERMISSION,
         )
         if (readPermission != PackageManager.PERMISSION_GRANTED) {
             _state.update { it.copy(phase = UploadPhase.Error(ErrorCodes.PROCESSING_FAILED, "файл", config)) }
             return
         }
-        launchUpload(uri)
+        launchUpload(source)
     }
 
     private fun canTakeExternalFile(state: UploadUiState) =
@@ -287,11 +288,11 @@ class UploadViewModel @Inject constructor(
         pendingUploadRecovery = null
         _state.update { it.copy(phase = UploadPhase.Busy(recovery.fileName, 0f, null),
             uploadOffline = false, askCancel = false) }
-        launchUpload(previous.uri, completePreviousAction = previous.action)
+        launchUpload(previous.source, completePreviousAction = previous.action)
     }
 
-    private fun launchUpload(uri: Uri, completePreviousAction: String? = null, retryOf: PickedFile? = null) {
-        lastPicked = uri
+    private fun launchUpload(source: StatementFile, completePreviousAction: String? = null, retryOf: PickedFile? = null) {
+        lastPicked = source
         _state.update { it.copy(uploadOffline = false, config = it.config ?: fallbackConfig()) }
         uploadJob = viewModelScope.launch {
             if (completePreviousAction != null) {
@@ -300,13 +301,17 @@ class UploadViewModel @Inject constructor(
             }
             val max = config?.maxFileSizeBytes ?: (10L * 1024 * 1024)
             // One pass off the main thread: real size (providers may not report it) and a content hash for the key.
-            val file = try {
-                withContext(Dispatchers.IO) { inspect(uri, max, retryOf?.name) }
+            val (file, body) = try {
+                withContext(Dispatchers.IO) { inspect(source, max, retryOf?.name) }
+            } catch (e: NotOfxDownload) {
+                lastPicked = null
+                _state.update { it.copy(phase = UploadPhase.Error(ErrorCodes.WRONG_FORMAT, e.fileName, config)) }
+                return@launch
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 // Unreadable document (revoked permission, provider error): nothing was sent.
-                _state.update { it.copy(phase = UploadPhase.Error(ErrorCodes.PROCESSING_FAILED, uri.lastPathSegment ?: "файл", config)) }
+                _state.update { it.copy(phase = UploadPhase.Error(ErrorCodes.PROCESSING_FAILED, source.uri.lastPathSegment ?: "файл", config)) }
                 return@launch
             }
             if (file.size > max) {
@@ -318,14 +323,14 @@ class UploadViewModel @Inject constructor(
                 val oldKey = keys.pendingKey(oldAction)
                 uploadReadinessJob?.cancel()
                 if (oldKey != null) {
-                    pendingUploadRecovery = PendingUploadRecovery(oldAction, uri, oldKey)
+                    pendingUploadRecovery = PendingUploadRecovery(oldAction, source, oldKey)
                     _state.update { it.copy(phase = UploadPhase.RecoveryRequired(file.name), uploadRetryReady = false) }
                 } else {
                     _state.update { it.copy(phase = UploadPhase.Error(ErrorCodes.PROCESSING_FAILED, file.name, config)) }
                 }
                 return@launch
             }
-            lastInspected = uri to file
+            lastInspected = source to file
             // Upload identity includes content and the raw name (FIN-340); retry permission still belongs to the original action.
             // The pending UUID survives restoration, but its elapsed-age proof does not. Same-file retry uses
             // that UUID only while proven safe; after restoration/expiry an explicit new intent is required.
@@ -335,7 +340,7 @@ class UploadViewModel @Inject constructor(
             val legacyKey = if (keys.pendingKey(action) == null) keys.pendingKey(legacyAction) else null
             if (legacyKey != null) {
                 uploadReadinessJob?.cancel()
-                pendingUploadRecovery = PendingUploadRecovery(legacyAction, uri, legacyKey)
+                pendingUploadRecovery = PendingUploadRecovery(legacyAction, source, legacyKey)
                 _state.update { it.copy(phase = UploadPhase.RecoveryRequired(file.name), uploadRetryReady = false, uploadOffline = false) }
                 return@launch
             }
@@ -344,7 +349,7 @@ class UploadViewModel @Inject constructor(
             uploadReadinessJob?.cancel()
             val key = keys.keyFor(action, elapsedClock)
             if (key.replayWindow?.isOpen(elapsedClock) != true) {
-                pendingUploadRecovery = PendingUploadRecovery(action, uri, key)
+                pendingUploadRecovery = PendingUploadRecovery(action, source, key)
                 _state.update { it.copy(phase = UploadPhase.RecoveryRequired(file.name), uploadRetryReady = false, uploadOffline = false) }
                 return@launch
             }
@@ -354,7 +359,7 @@ class UploadViewModel @Inject constructor(
             tracker.track(Events.STATEMENTS_UPLOAD_STARTED)
             _state.update { it.copy(phase = UploadPhase.Busy(file.name, 0f, uploadId = null)) }
             try {
-                val accepted = uploadWithRetry(key, file, uri)
+                val accepted = uploadWithRetry(key, body)
                 // 202 is the final response of this action: re-picking the same file later is a new upload.
                 keys.complete(action)
                 _state.update { it.copy(phase = UploadPhase.Busy(accepted.fileName, 0.05f, accepted.uploadId)) }
@@ -373,17 +378,17 @@ class UploadViewModel @Inject constructor(
     }
 
     /** 409 REQUEST_IN_PROGRESS: the first request with this key is still running — wait and repeat it. */
-    private suspend fun uploadWithRetry(key: IdempotencyKey, file: PickedFile, uri: Uri): ru.finassist.pf.core.api.model.UploadAccepted {
+    private suspend fun uploadWithRetry(key: IdempotencyKey, body: UploadFile): ru.finassist.pf.core.api.model.UploadAccepted {
         repeat(IN_PROGRESS_RETRIES) {
             try {
-                return api.uploadStatement(key, UploadFile(name = file.name, size = file.size, open = { open(uri) }))
+                return api.uploadStatement(key, body)
             } catch (e: AppError.InProgress) {
                 if (e.requestRetryable == false || key.replayWindow?.isOpen(elapsedClock) != true) throw e
                 delay((e.retryAfterSeconds ?: 2).coerceAtLeast(1) * 1000L)
                 if (key.replayWindow?.isOpen(elapsedClock) != true) throw e
             }
         }
-        return api.uploadStatement(key, UploadFile(name = file.name, size = file.size, open = { open(uri) }))
+        return api.uploadStatement(key, body)
     }
 
     private fun open(uri: Uri): InputStream = try {
@@ -487,9 +492,9 @@ class UploadViewModel @Inject constructor(
     /** Ordinary retry keeps the same proven key; unknown/expired proof shows recovery and never renews it. */
     fun retryUpload() {
         if (!_state.value.uploadRetryReady) return
-        val uri = lastPicked ?: return
+        val source = lastPicked ?: return
         if (uploadInFlight) return
-        launchUpload(uri, retryOf = lastInspected?.takeIf { it.first == uri }?.second)
+        launchUpload(source, retryOf = lastInspected?.takeIf { it.first == source }?.second)
     }
 
     fun askCancel(show: Boolean) = _state.update { it.copy(askCancel = show) }
@@ -545,9 +550,11 @@ class UploadViewModel @Inject constructor(
      * (grpc-api.md 6).
      */
     private class PickedFile(val name: String, val size: Long, val bodyHash: String, val contentHash: String)
+    private class NotOfxDownload(val fileName: String) : Exception()
 
     /** Reads the file once: display name, real byte count (stops counting past [max]) and the body hash. */
-    private fun inspect(uri: Uri, max: Long, requestName: String?): PickedFile {
+    private fun inspect(source: StatementFile, max: Long, requestName: String?): Pair<PickedFile, UploadFile> {
+        val uri = source.uri
         var name = requestName ?: uri.lastPathSegment ?: "statement.ofx"
         if (requestName == null) context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
             if (c.moveToFirst()) {
@@ -555,6 +562,9 @@ class UploadViewModel @Inject constructor(
                 if (n >= 0 && !c.isNull(n)) name = c.getString(n)
             }
         }
+        if (source.validateDownload && !name.endsWith(".ofx", ignoreCase = true)) throw NotOfxDownload(name)
+        // Keep the validated bytes for this attempt so reopening a mutable URI cannot change the upload.
+        val download = if (source.validateDownload) ByteArrayOutputStream() else null
         val digest = MessageDigest.getInstance("SHA-256")
         var size = 0L
         open(uri).use { input ->
@@ -565,6 +575,7 @@ class UploadViewModel @Inject constructor(
                 size += read
                 if (size > max) break
                 digest.update(buffer, 0, read)
+                download?.write(buffer, 0, read)
             }
         }
         val contentDigest = digest.digest()
@@ -572,8 +583,11 @@ class UploadViewModel @Inject constructor(
             update(contentDigest)
             update(name.toByteArray(Charsets.UTF_8))
         }
-        return PickedFile(name, size, body.digest().joinToString("") { "%02x".format(it) },
+        val file = PickedFile(name, size, body.digest().joinToString("") { "%02x".format(it) },
             contentDigest.joinToString("") { "%02x".format(it) })
+        val bytes = download?.takeIf { size <= max }?.toByteArray()
+        if (bytes != null && !hasOfxEnvelope(bytes)) throw NotOfxDownload(name)
+        return file to UploadFile(name, size) { bytes?.inputStream() ?: open(uri) }
     }
 
     private companion object {

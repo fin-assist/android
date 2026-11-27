@@ -94,6 +94,7 @@ class UploadViewModelTest {
         val keys: MutableList<String> = java.util.Collections.synchronizedList(mutableListOf())
         /** `file.name` of every upload attempt, in the order of [keys]. */
         val names: MutableList<String> = java.util.Collections.synchronizedList(mutableListOf())
+        var readUpload: ((UploadFile) -> Unit)? = null
         /** Thrown by the next uploads, one each, before the file is accepted. */
         val uploadFailures = ArrayDeque<AppError>()
         /** While set, the upload waits for it: the request is «in flight». */
@@ -114,6 +115,7 @@ class UploadViewModelTest {
         override suspend fun uploadStatement(key: IdempotencyKey, file: UploadFile): UploadAccepted {
             keys += key.value
             names += file.name
+            readUpload?.invoke(file)
             uploadGate?.await()
             if (offline) throw AppError.Offline()
             synchronized(uploadFailures) { uploadFailures.removeFirstOrNull() }?.let { throw it }
@@ -208,7 +210,7 @@ class UploadViewModelTest {
             val external = launch(start = CoroutineStart.UNDISPATCHED) {
                 vm.onExternalFilePicked {
                     selected = true
-                    uri
+                    StatementFile(uri)
                 }
             }
             assertFalse(selected)
@@ -239,7 +241,7 @@ class UploadViewModelTest {
             val external = launch(Dispatchers.Main, start = CoroutineStart.UNDISPATCHED) {
                 vm.onExternalFilePicked {
                     taken = true
-                    uri
+                    StatementFile(uri)
                 }
             }
             assertIs<UploadPhase.ConfigFailure>(vm.state.value.phase)
@@ -286,7 +288,7 @@ class UploadViewModelTest {
             val external = launch(Dispatchers.Main, start = CoroutineStart.UNDISPATCHED) {
                 vm.onExternalFilePicked {
                     taken = true
-                    second
+                    StatementFile(second)
                 }
             }
             assertIs<UploadPhase.Busy>(vm.state.value.phase)
@@ -334,7 +336,7 @@ class UploadViewModelTest {
             val external = launch(Dispatchers.Main, start = CoroutineStart.UNDISPATCHED) {
                 vm.onExternalFilePicked {
                     taken = true
-                    Uri.parse("content://test/pending.ofx")
+                    StatementFile(Uri.parse("content://test/pending.ofx"))
                 }
             }
             assertTrue(vm.beginFilePick())
@@ -365,7 +367,7 @@ class UploadViewModelTest {
             val external = launch(Dispatchers.Main, start = CoroutineStart.UNDISPATCHED) {
                 vm.onExternalFilePicked {
                     taken = true
-                    uri
+                    StatementFile(uri)
                 }
             }
             assertFalse(taken)
@@ -383,6 +385,95 @@ class UploadViewModelTest {
     private fun contextWithExternalReadGrant() = object : ContextWrapper(context) {
         override fun checkUriPermission(uri: Uri, pid: Int, uid: Int, modeFlags: Int) =
             PackageManager.PERMISSION_GRANTED
+    }
+
+    @Test fun `binary downloads reject an unrelated name or unrelated bytes before upload`() {
+        vm = newViewModel(fileContext = contextWithExternalReadGrant())
+        val reads = AtomicInteger()
+        val wrongName = mediaDownload("report.txt") {
+            reads.incrementAndGet()
+            ByteArrayInputStream("<OFX></OFX>".toByteArray())
+        }
+        runBlocking { vm.onExternalFilePicked { wrongName } }
+        await("the file name is rejected") { it.phase == UploadPhase.Error(ErrorCodes.WRONG_FORMAT, "report.txt", config) }
+        awaitIdle()
+        assertEquals(0, reads.get())
+        assertTrue(api.keys.isEmpty())
+
+        vm.backToGuide()
+        val wrongBytes = mediaDownload("report.ofx") {
+            reads.incrementAndGet()
+            ByteArrayInputStream("<html>Expired session</html>".toByteArray())
+        }
+        runBlocking { vm.onExternalFilePicked { wrongBytes } }
+        await("the file contents are rejected") { it.phase == UploadPhase.Error(ErrorCodes.WRONG_FORMAT, "report.ofx", config) }
+        awaitIdle()
+        vm.retryUpload()
+        assertFalse(vm.uploadInFlight)
+        assertEquals(1, reads.get())
+        assertTrue(api.keys.isEmpty())
+    }
+
+    @Test fun `binary upload and in-progress retry use the checked bytes even when the provider changes`() {
+        vm = newViewModel(fileContext = contextWithExternalReadGrant())
+        val ofx = "<OFX></OFX>"
+        var current = ofx
+        val reads = AtomicInteger()
+        val source = mediaDownload("statement.OFX") {
+            reads.incrementAndGet()
+            ByteArrayInputStream(current.toByteArray())
+        }
+        val payloads = mutableListOf<String>()
+        api.readUpload = { file ->
+            current = "different contents"
+            payloads += file.open().use { it.readBytes().decodeToString() }
+        }
+        api.uploadFailures += AppError.InProgress(retryAfterSeconds = 1)
+
+        runBlocking { vm.onExternalFilePicked { source } }
+        await("the first request") { api.keys.size == 1 }
+        advanceUntil("the request in progress is replayed") { api.keys.size == 2 }
+        awaitAccepted()
+
+        assertEquals(listOf(ofx, ofx), payloads)
+        assertEquals(1, reads.get())
+        assertEquals(api.keys.first(), api.keys.last())
+    }
+
+    @Test fun `manual retry of a binary download revalidates it and retains its key`() {
+        vm = newViewModel(fileContext = contextWithExternalReadGrant())
+        val reads = AtomicInteger()
+        val source = mediaDownload("statement.ofx") {
+            reads.incrementAndGet()
+            ByteArrayInputStream("<OFX></OFX>".toByteArray())
+        }
+        api.uploadFailures += AppError.Offline()
+
+        runBlocking { vm.onExternalFilePicked { source } }
+        await("the offline error") { it.uploadOffline }
+        awaitIdle()
+        vm.retryUpload()
+        awaitAccepted()
+
+        assertEquals(2, reads.get())
+        assertEquals(2, api.keys.size)
+        assertEquals(api.keys.first(), api.keys.last())
+    }
+
+    private fun mediaDownload(name: String, open: () -> java.io.InputStream): StatementFile {
+        val uri = Uri.parse("content://media/external/downloads/23")
+        val provider = object : android.content.ContentProvider() {
+            override fun onCreate() = true
+            override fun getType(uri: Uri) = "application/octet-stream"
+            override fun insert(uri: Uri, values: android.content.ContentValues?) = null
+            override fun delete(uri: Uri, selection: String?, selectionArgs: Array<out String>?) = 0
+            override fun update(uri: Uri, values: android.content.ContentValues?, selection: String?, selectionArgs: Array<out String>?) = 0
+            override fun query(uri: Uri, projection: Array<out String>?, selection: String?, selectionArgs: Array<out String>?, sortOrder: String?) =
+                android.database.MatrixCursor(arrayOf(android.provider.OpenableColumns.DISPLAY_NAME)).apply { addRow(arrayOf(name)) }
+        }
+        org.robolectric.shadows.ShadowContentResolver.registerProviderInternal("media", provider)
+        shadowOf(context.contentResolver).registerInputStreamSupplier(uri, open)
+        return StatementFile(uri, validateDownload = true)
     }
 
     @Test fun `selected dates request exact inclusive days and open unchanged server URL only after validation`() {
