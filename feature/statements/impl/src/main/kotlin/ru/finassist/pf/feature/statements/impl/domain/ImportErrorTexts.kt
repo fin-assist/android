@@ -11,12 +11,14 @@ object ImportErrorTexts {
 
     /**
      * [code] from api.md 3.2 / 3.3. A file of the wrong format is named by its extension — «Это файл PDF, а нужен
-     * OFX»; without one it is «Это не OFX».
+     * OFX»; an OFX extension or no extension gives «Это не OFX».
      */
     fun of(code: String, fileName: String, maxFileSizeBytes: Long): ImportErrorText = when (code) {
         ErrorCodes.CSV_NOT_ACCEPTED -> ImportErrorText("Это CSV, а нужен OFX", DOWNLOAD_ADVICE)
         ErrorCodes.WRONG_FORMAT -> {
-            val ext = fileName.substringAfterLast('.', "").takeIf { it.isNotBlank() && it.length <= 5 && it != fileName }
+            val ext = fileName.substringAfterLast('.', "").takeIf {
+                it.isNotBlank() && it.length <= 5 && it != fileName && !it.equals("ofx", ignoreCase = true)
+            }
             ImportErrorText(ext?.let { "Это файл ${it.uppercase()}, а нужен OFX" } ?: "Это не OFX", DOWNLOAD_ADVICE)
         }
         ErrorCodes.WRONG_BANK -> ImportErrorText(

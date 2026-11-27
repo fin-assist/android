@@ -914,8 +914,9 @@ A newly registered user who opens an unavailable file keeps the first-run guide 
 The test also checks that closing the guide after an unsupported server time zone dismisses the pending
 selection, and that the same file can then be opened again.
 On API 29 and above the cold launch uses a numeric MediaStore downloads URI and `application/octet-stream`.
-The test also opens a download with an `.ofx` name and unrelated bytes, checks the format error and verifies
-that the upload request count stays unchanged. The system picker has its own coverage in `StatementPickerTest`.
+The test also opens a download with an `.ofx` name and unrelated bytes, checks «Это не OFX» and verifies
+that the upload request count stays unchanged. Package Manager assertions cover both Downloads paths and
+exclude unrelated collections and providers. The system picker has its own coverage in `StatementPickerTest`.
 
 Focused JVM tests cover Android replaying the original intent from Recents, keeping one selection without
 reading it or sending a POST after a failed initial config request, and deferring a selection while the
@@ -924,6 +925,8 @@ an explicit permitted retry and a verified guide. During an existing import, the
 selection waits while the prior result or recovery is still on screen.
 JVM tests also verify that an open picker has priority over the pending external selection, cancellation
 releases that selection, and a late picker result cannot replace an import being parsed.
+For generic downloads they verify rejection of a wrong name or contents before any POST, reuse of the
+validated bytes after a 409 even when the provider changes the file, and revalidation on manual retry.
 
 The Android 16 Chrome download probe confirmed `ACTION_VIEW` with `content://media/external/downloads/<id>`.
 It kept `application/x-ofx` for an OFX served with that MIME type and `application/octet-stream` for an OFX

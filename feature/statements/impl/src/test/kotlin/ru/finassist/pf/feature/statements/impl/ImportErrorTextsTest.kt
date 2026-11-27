@@ -18,6 +18,7 @@ class ImportErrorTextsTest {
 
     @Test fun `a wrong format without a usable extension`() {
         assertEquals("Это не OFX", ImportErrorTexts.of(ErrorCodes.WRONG_FORMAT, "statement", tenMb).reason)
+        assertEquals("Это не OFX", ImportErrorTexts.of(ErrorCodes.WRONG_FORMAT, "statement.OFX", tenMb).reason)
         assertEquals("Это не OFX", ImportErrorTexts.of(ErrorCodes.WRONG_FORMAT, "statement.", tenMb).reason)
         assertEquals("Это не OFX", ImportErrorTexts.of(ErrorCodes.WRONG_FORMAT, "archive.backup2026", tenMb).reason)
     }

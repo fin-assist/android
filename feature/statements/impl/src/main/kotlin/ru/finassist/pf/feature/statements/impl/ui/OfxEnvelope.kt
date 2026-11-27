@@ -21,6 +21,11 @@ internal fun hasOfxEnvelope(bytes: ByteArray): Boolean {
         if (endIndex < 0) return false
         markup = markup.substring(endIndex + end.length).trimStart()
     }
-    return markup.startsWith("<OFX", ignoreCase = true) &&
-        markup.getOrNull(4)?.let { it == '>' || it.isWhitespace() } == true
+    if (!markup.startsWith("<OFX", ignoreCase = true)) return false
+    val boundary = markup.getOrNull(4) ?: return false
+    if (boundary == '>') return true
+    if (!boundary.isWhitespace()) return false
+    val end = markup.indexOf('>', startIndex = 4)
+    val nested = markup.indexOf('<', startIndex = 4)
+    return end >= 0 && (nested < 0 || end < nested)
 }

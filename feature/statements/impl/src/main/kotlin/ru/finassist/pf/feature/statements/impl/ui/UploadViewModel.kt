@@ -140,10 +140,9 @@ class UploadViewModel @Inject constructor(
     private var heldComplete: Pair<String, ImportEvent.Complete>? = null
 
     /** The last picked file: «Повторить» after a network failure sends it again. */
-    private data class UploadSource(val uri: Uri, val validateDownload: Boolean = false)
-    private var lastPicked: UploadSource? = null
-    private var lastInspected: Pair<UploadSource, PickedFile>? = null
-    private data class PendingUploadRecovery(val action: String, val source: UploadSource, val key: IdempotencyKey)
+    private var lastPicked: StatementFile? = null
+    private var lastInspected: Pair<StatementFile, PickedFile>? = null
+    private data class PendingUploadRecovery(val action: String, val source: StatementFile, val key: IdempotencyKey)
     private var pendingUploadRecovery: PendingUploadRecovery? = null
 
     init {
@@ -248,7 +247,7 @@ class UploadViewModel @Inject constructor(
     }
 
     fun onFilePicked(uri: Uri?) {
-        if (uri != null && canStartPickedFile(_state.value)) launchUpload(UploadSource(uri))
+        if (uri != null && canStartPickedFile(_state.value)) launchUpload(StatementFile(uri))
         // Keep the picker priority until its selected file has started, or selection was cancelled.
         _state.update { it.copy(awaitingFilePicker = false) }
     }
@@ -257,7 +256,7 @@ class UploadViewModel @Inject constructor(
         !uploadInFlight && state.phase !is UploadPhase.Busy && state.doneUploadId == null
 
     /** Wait for a verified guide without replacing the current upload, its result or its retry. */
-    suspend fun onExternalFilePicked(takeSelection: () -> Uri?) {
+    suspend fun onExternalFilePicked(takeSelection: () -> StatementFile?) {
         while (true) {
             state.first { it.phase == UploadPhase.Disabled || canTakeExternalFile(it) }
             // The previous pick may still be inspecting its URI before it enters Busy.
@@ -266,15 +265,15 @@ class UploadViewModel @Inject constructor(
             if (current.phase == UploadPhase.Disabled) return
             if (canTakeExternalFile(current) && !uploadInFlight) break
         }
-        val uri = takeSelection() ?: return
+        val source = takeSelection() ?: return
         val readPermission = context.checkUriPermission(
-            uri, Process.myPid(), Process.myUid(), Intent.FLAG_GRANT_READ_URI_PERMISSION,
+            source.uri, Process.myPid(), Process.myUid(), Intent.FLAG_GRANT_READ_URI_PERMISSION,
         )
         if (readPermission != PackageManager.PERMISSION_GRANTED) {
             _state.update { it.copy(phase = UploadPhase.Error(ErrorCodes.PROCESSING_FAILED, "файл", config)) }
             return
         }
-        launchUpload(UploadSource(uri, validateDownload = uri.isMediaStoreDownload()))
+        launchUpload(source)
     }
 
     private fun canTakeExternalFile(state: UploadUiState) =
@@ -292,7 +291,7 @@ class UploadViewModel @Inject constructor(
         launchUpload(previous.source, completePreviousAction = previous.action)
     }
 
-    private fun launchUpload(source: UploadSource, completePreviousAction: String? = null, retryOf: PickedFile? = null) {
+    private fun launchUpload(source: StatementFile, completePreviousAction: String? = null, retryOf: PickedFile? = null) {
         lastPicked = source
         _state.update { it.copy(uploadOffline = false, config = it.config ?: fallbackConfig()) }
         uploadJob = viewModelScope.launch {
@@ -554,7 +553,7 @@ class UploadViewModel @Inject constructor(
     private class NotOfxDownload(val fileName: String) : Exception()
 
     /** Reads the file once: display name, real byte count (stops counting past [max]) and the body hash. */
-    private fun inspect(source: UploadSource, max: Long, requestName: String?): Pair<PickedFile, UploadFile> {
+    private fun inspect(source: StatementFile, max: Long, requestName: String?): Pair<PickedFile, UploadFile> {
         val uri = source.uri
         var name = requestName ?: uri.lastPathSegment ?: "statement.ofx"
         if (requestName == null) context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
