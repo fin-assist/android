@@ -7,3 +7,9 @@ import androidx.compose.runtime.staticCompositionLocalOf
 class ExternalStatementSelection(val id: String, val take: () -> Uri?)
 
 val LocalExternalStatementSelection = staticCompositionLocalOf<ExternalStatementSelection?> { null }
+
+private val mediaStoreDownloadPath = Regex("/external(?:_primary)?/downloads/[0-9]+")
+
+/** Chrome uses public MediaStore downloads with an opaque numeric ID. */
+fun Uri.isMediaStoreDownload(): Boolean =
+    scheme == "content" && authority == "media" && encodedPath?.let(mediaStoreDownloadPath::matches) == true

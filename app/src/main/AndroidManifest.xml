@@ -57,6 +57,13 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:scheme="content" android:mimeType="application/x-ofx" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" android:host="media" android:mimeType="application/octet-stream" />
+                <data android:pathPrefix="/external/downloads/" />
+                <data android:pathPrefix="/external_primary/downloads/" />
+            </intent-filter>
         </activity>
     </application>
 

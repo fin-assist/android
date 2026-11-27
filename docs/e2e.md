@@ -886,7 +886,7 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | native `ScreenErrorTransitionTest#profileReadFailureReplacesThemeOutcomeAndRetries` | actual ProfileContent: theme failure → read failure without the old outcome; available Retry restores new profile data; native reader/state injection (Qase66, FIN-396) |
 | native `ScreenErrorTransitionTest#historyReadFailureReplacesDeleteOutcomeAndRetries` | actual HistoryContent: deletion failure → read failure without the old outcome; available Retry refreshes the list without another DELETE; native reader/state injection (Qase67, FIN-396) |
 | native `StatementPickerTest` | login button opens exactly `https://tbank-online.com/login` in an intercepted ACTION_VIEW (FIN-395; Qase16), then upload with a picker result stubbed by Espresso-Intents (on the e2e build the picker is `E2eDocumentPickerActivity`) up to the import result; the `ACTION_OPEN_DOCUMENT` intent itself: Robolectric `PickStatementDocumentTest` |
-| native `ExternalStatementOpenTest#importsAfterSignInOnColdStartAndAgainAfterUnlockOnWarmStart` | typed OFX from another Android app, sign-in and unlock gates, activity recreation without duplicate POST, navigation through the prior result and its unread lines before dismissal, unreadable URI error, and the first-run upload guide at registration ([Qase99](https://app.qase.io/case/PLAINFIN-99), FIN-549) |
+| native `ExternalStatementOpenTest#importsAfterSignInOnColdStartAndAgainAfterUnlockOnWarmStart` | a generic MediaStore OFX and a typed OFX, rejection of non-OFX bytes before POST, sign-in and unlock gates, activity recreation without duplicate POST, prior result and unread lines, unreadable URI error, and the first-run upload guide ([Qase99](https://app.qase.io/case/PLAINFIN-99), FIN-549) |
 | native `StatementPickerTest#opensPrivacyPolicyBeforeRegistration` | standalone policy link before account creation opens exactly `https://documents.plainfin.ru/privacy` through ACTION_VIEW; no terms/acceptance text or second consent checkbox; returning to registration still allows creation (Qase2, FIN-519/520) |
 | native `StatementPickerTest#opensPrivacyPolicyFromUploadNotice` | «Как мы защищаем данные» in the upload notice opens exactly `https://documents.plainfin.ru/privacy` through ACTION_VIEW; the upload guide remains available after returning (Qase14, FIN-520) |
 
@@ -913,7 +913,9 @@ the existing error for a file without a grant.
 A newly registered user who opens an unavailable file keeps the first-run guide and «Загружу позже».
 The test also checks that closing the guide after an unsupported server time zone dismisses the pending
 selection, and that the same file can then be opened again.
-The system picker still has its own native coverage in `StatementPickerTest`.
+On API 29 and above the cold launch uses a numeric MediaStore downloads URI and `application/octet-stream`.
+The test also opens a download with an `.ofx` name and unrelated bytes, checks the format error and verifies
+that the upload request count stays unchanged. The system picker has its own coverage in `StatementPickerTest`.
 
 Focused JVM tests cover Android replaying the original intent from Recents, keeping one selection without
 reading it or sending a POST after a failed initial config request, and deferring a selection while the
@@ -926,13 +928,15 @@ releases that selection, and a late picker result cannot replace an import being
 The Android 16 Chrome download probe confirmed `ACTION_VIEW` with `content://media/external/downloads/<id>`.
 It kept `application/x-ofx` for an OFX served with that MIME type and `application/octet-stream` for an OFX
 served as generic binary data. The numeric URI path exposes no extension for intent filtering. The display
-name becomes available from the provider after selection. The app declares the OFX MIME type so it is offered
-only for typed content; downloads served with a generic type remain selectable through the in-app picker.
+name becomes available from the provider after selection. The app also accepts generic binary data for the
+public `media` downloads collection. After sign-in or unlock it requires an `.ofx` name and an OFX envelope
+before posting the same inspected bytes. Other generic files from that collection can appear in the Android
+chooser and receive a local format error if opened. Generic files from unrelated providers or MediaStore
+collections do not match the filter.
 
 Local validation on 2026-11-24 used an Android 16 (API 36) Pixel 6 emulator. If Gradle cannot resolve its
 additional UTP artifact, install the `mockE2e` app and test APKs and run the focused class through
-AndroidJUnitRunner with an external timeout. Android Package Manager resolved `application/x-ofx` to MainActivity
-and returned no matching activity for `application/octet-stream` or `text/plain` in the app.
+AndroidJUnitRunner with an external timeout. The initial release supported only `application/x-ofx`.
 See [Qase99](https://app.qase.io/case/PLAINFIN-99).
 
 Not covered yet (FIN-581): the chat regression test measures the actual navigation inset with the keyboard closed.

@@ -23,8 +23,16 @@ class StatementOpenIntentTest {
         assertNull(incomingStatementUri(openOfx().addFlags(Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY)))
     }
 
-    @Test fun `ignores opaque downloads with a generic type and unrelated actions`() {
-        assertNull(incomingStatementUri(openOfx().setDataAndType(file, "application/octet-stream")))
+    @Test fun `accepts generic binary files only from the public MediaStore download collection`() {
+        val generic = openOfx().setDataAndType(file, BINARY_MIME_TYPE)
+        assertEquals(file, incomingStatementUri(generic))
+        val primary = Uri.parse("content://media/external_primary/downloads/24")
+        assertEquals(primary, incomingStatementUri(Intent(generic).setDataAndType(primary, BINARY_MIME_TYPE)))
+        listOf("content://other/external/downloads/23", "content://media/external/file/23",
+            "content://media/external/downloads/23/other", "content://media/external/downloads/statement.ofx").forEach {
+            assertNull(incomingStatementUri(Intent(generic).setDataAndType(Uri.parse(it), BINARY_MIME_TYPE)))
+        }
+        assertNull(incomingStatementUri(Intent(generic).addFlags(Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY)))
         assertNull(incomingStatementUri(openOfx().setAction(Intent.ACTION_SEND)))
     }
 
